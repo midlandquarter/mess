@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="bn-BD">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Midland Quarter - মেস ম্যানেজমেন্ট</title>
+<link rel="icon" href="favicon.ico">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f0f1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MQ Mess">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<!-- ── Performance: DNS + TCP handshake আগেই সেরে রাখো ── -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://midlandquarter-c516b-default-rtdb.firebaseio.com">
+<link rel="dns-prefetch" href="https://firebaseapp.com">
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+
+<!-- ── Splash icon preload — screen-এ তাড়াতাড়ি দেখাবে ── -->
+<link rel="preload" as="image" href="icon-512.png">
+
+<!-- Dark mode flash fix: apply class BEFORE paint -->
+<script>
+try{
+  var mqDarkStored = localStorage.getItem('mq_dark');
+  var mqDark = mqDarkStored===null
+    ? !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    : mqDarkStored==='1';
+  if(mqDark) document.documentElement.classList.add('dark-mode');
+}catch(e){}
+</script>
+<link rel="stylesheet" href="style.css">
+
+<!-- Font: display=swap তাই block করে না -->
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- PDF/Canvas — defer নেই, PDF button যেকোনো সময় click হতে পারে -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- DOMPurify: defer দেওয়া যাবে না — safeHTML() সব জায়গায় call হয় -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+
+<!-- Firebase SDK: sequential order জরুরি (app → database → auth) -->
+<!-- async দেওয়া যাবে না — order dependency আছে -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<!-- ── Modular shared layer (core.js must load before inline script block) ── -->
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/shared/core.js"></script>
+<script src="js/db.js"></script>
+</head>
+<body>
+
+<!-- ═══════════ OFFICE MEAL CARD (Admin Panel) ═══════════ -->
+    <div class="card" id="card-office-meal" style="display:none">
+      <div class="sec-title">🏢 অফিস মিল রেট সেট করুন</div>
+      <div class="alert alert-info show" style="font-size:12px;line-height:1.6;margin-bottom:14px">
+        <b>Office MEPL</b> ও <b>Office MPCL</b> একাউন্টের মিলগুলো অফিস মিল হিসেবে গণ্য হবে।<br>
+        অফিস মিলে বাবুর্চি বিল বা অন্যান্য চার্জ যোগ হয় না।<br>
+        শুধুমাত্র: <b>অফিস মিল × অফিস মিল রেট = অফিস মিল বিল</b>
+      </div>
+
+      <!-- Office Meal Rate per mess month -->
+      <div class="form-group">
+        <label class="form-label">📅 মেস মাস নির্বাচন</label>
+        <select id="ofm-month" class="form-input" onchange="loadOfficeMealInfo()"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">💰 অফিস মিল রেট (প্রতি মিল) ৳</label>
+        <input type="number" id="ofm-rate" class="form-input" placeholder="যেমন: ৫৫.৫" min="0" step="0.01">
+      </div>
+      <div id="ofm-info" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;display:none">
+        <div id="ofm-info-rows"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveOfficeMealRate()" style="margin-bottom:8px">✅ রেট সেভ করুন</button>
+
+      <!-- Notes section -->
+      <div class="divider" style="margin:14px 0"></div>
+      <div class="sec-title" style="font-size:14px">📝 নোট (কন্ট্রাক্টর / তারিখ / কারণ)</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:10px">কোন ঠিকাদারের মাধ্যমে চলছে, কোন কারণে রেট আলাদা — সব এখানে লিখুন।</p>
+      <div class="form-group">
+        <label class="form-label">নোট লিখুন</label>
+        <textarea id="ofm-note-input" class="form-input" rows="3" placeholder="যেমন: ABC Contractors — ০১/০২/২০২৬ থেকে চুক্তি, রেট ৫৫ টাকা প্রতি মিল" style="resize:none"></textarea>
+      </div>
+      <button class="btn btn-outline" onclick="saveOfficeMealNote()">💾 নোট সেভ করুন</button>
+
+      <!-- Notes history -->
+      <div id="ofm-notes-list" style="margin-top:14px"></div>
+    </div>
+
+<!-- ═══════════ OFFICE MEAL SCREEN ═══════════ -->
+<div id="sc-officemeal" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">🏢 অফিস মিল</div>
+    <div class="header-sub" id="ofms-date-sub">MEPL / MPCL Management</div>
+  </div>
+  <div class="content pb-nav">
+
+    <!-- Date navigation -->
+    <div class="card">
+      <div class="sec-title">📅 তারিখ নির্বাচন</div>
+      <div class="date-nav">
+        <button class="date-nav-btn" onclick="ofmsShiftDate(-1)">‹</button>
+        <input type="date" id="ofms-date" class="form-input" style="flex:1" onchange="ofmsLoadDate()">
+        <button class="date-nav-btn" onclick="ofmsShiftDate(1)">›</button>
+      </div>
+    </div>
+
+    <!-- Month + Rate -->
+    <div class="card">
+      <div class="sec-title">💰 অফিস মিল রেট</div>
+      <div class="form-group">
+        <label class="form-label">মেস মাস</label>
+        <select id="ofms-month" class="form-input" onchange="loadOfficeMealScreen()"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">প্রতি মিল রেট ৳</label>
+        <input type="number" id="ofms-rate" class="form-input" placeholder="যেমন: ৫৫.৫" min="0" step="0.01">
+      </div>
+      <button class="btn btn-primary" onclick="saveOfficeMealRateScreen()">✅ রেট সেভ করুন</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="card" style="padding:14px 18px;">
+      <div class="legend">
+        <span class="tag-P">P = প্ল্যান্ট</span>
+        <span class="tag-Q">Q = কোয়ার্টার</span>
+        <span class="tag-off">off = বন্ধ</span>
+      </div>
+      <p style="font-size:11px;color:var(--text-light);margin-top:6px">সংখ্যা × মিল মান = মোট মিল। যেমন সকালে ২ দিলে = ২×০.৭৫ = ১.৫ মিল</p>
+    </div>
+
+    <!-- MEPL Account -->
+    <div class="card" id="ofms-mepl-card">
+      <div class="sec-title">🏢 Office MEPL</div>
+      <div id="ofms-mepl-meals" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+        <span>এই মাসের মোট মিল: <b style="color:var(--primary)" id="ofms-mepl-total-meals">0.00</b></span>
+        <span>মোট বিল: <b style="color:var(--danger)" id="ofms-mepl-total-bill">৳0.00</b></span>
+      </div>
+      <!-- Entry toggled by button -->
+      <div id="ofms-mepl-entry" style="display:none">
+        <!-- Breakfast -->
+        <div class="meal-card">
+          <div class="meal-hd">
+            <div><div class="meal-title">🌤️ সকাল — Breakfast</div><div class="meal-sub" id="ofms-cfg-mepl-b">মিল মান: ০.৭৫</div></div>
+          </div>
+          <div class="pqo-row">
+            <input type="number" id="ofms-qty-mepl-b" class="qty-input" min="0" max="5000" value="1" oninput="ofmsCalcMeal('mepl','b')">
+            <button class="pqo-btn" id="ofms-btn-mepl-b-P" onclick="ofmsSetPQO('mepl','b','P')">P<small>Plant</small></button>
+            <button class="pqo-btn" id="ofms-btn-mepl-b-Q" onclick="ofmsSetPQO('mepl','b','Q')">Q<small>Quarter</small></button>
+            <button class="pqo-btn seloff" id="ofms-btn-mepl-b-off" onclick="ofmsSetPQO('mepl','b','off')">off<small>বন্ধ</small></button>
+          </div>
+          <div class="calc-info" id="ofms-calc-mepl-b">বন্ধ</div>
+        </div>
+        <!-- Lunch -->
+        <div class="meal-card">
+          <div class="meal-hd">
+            <div><div class="meal-title">☀️ দুপুর — Lunch</div><div class="meal-sub" id="ofms-cfg-mepl-l">মিল মান: ১.৫</div></div>
+          </div>
+          <div class="pqo-row">
+            <input type="number" id="ofms-qty-mepl-l" class="qty-input" min="0" max="5000" value="1" oninput="ofmsCalcMeal('mepl','l')">
+            <button class="pqo-btn" id="ofms-btn-mepl-l-P" onclick="ofmsSetPQO('mepl','l','P')">P<small>Plant</small></button>
+            <button class="pqo-btn selQ" id="ofms-btn-mepl-l-Q" onclick="ofmsSetPQO('mepl','l','Q')">Q<small>Quarter</small></button>
+            <button class="pqo-btn" id="ofms-btn-mepl-l-off" onclick="ofmsSetPQO('mepl','l','off')">off<small>বন্ধ</small></button>
+          </div>
+          <div class="calc-info" id="ofms-calc-mepl-l">বন্ধ</div>
+        </div>
+        <!-- Dinner -->
+        <div class="meal-card">
+          <div class="meal-hd">
+            <div><div class="meal-title">🌙 রাত — Dinner</div><div class="meal-sub" id="ofms-cfg-mepl-d">মিল মান: ০.৭৫</div></div>
+          </div>
+          <div class="pqo-row">
+            <input type="number" id="ofms-qty-mepl-d" class="qty-input" min="0" max="5000" value="1" oninput="ofmsCalcMeal('mepl','d')">
+            <button class="pqo-btn" id="ofms-btn-mepl-d-P" onclick="ofmsSetPQO('mepl','d','P')">P<small>Plant</small></button>
+            <button class="pqo-btn" id="ofms-btn-mepl-d-Q" onclick="ofmsSetPQO('mepl','d','Q')">Q<small>Quarter</small></button>
+            <button class="pqo-btn seloff" id="ofms-btn-mepl-d-off" onclick="ofmsSetPQO('mepl','d','off')">off<small>বন্ধ</small></button>
+          </div>
+          <div class="calc-info" id="ofms-calc-mepl-d">বন্ধ</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">📝 নোট (ঐচ্ছিক)</label>
+          <input type="text" id="ofms-mepl-note" class="form-input" placeholder="ঠিকাদার, কারণ...">
+        </div>
+        <button class="btn btn-accent" onclick="saveOfficeMeal('mepl')" style="margin-bottom:8px">✅ মিল সেভ করুন</button>
+        <button class="btn btn-outline" onclick="toggleOfficeMealEntry('mepl')">✕ বন্ধ করুন</button>
+      </div>
+      <button id="ofms-mepl-toggle" class="btn btn-outline" style="margin-top:6px" onclick="toggleOfficeMealEntry('mepl')">✏️ মিল এন্ট্রি করুন</button>
+    </div>
+
+    <!-- MPCL Account -->
+    <div class="card" id="ofms-mpcl-card">
+      <div class="sec-title">🏢 Office MPCL</div>
+      <div id="ofms-mpcl-meals" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+        <span>এই মাসের মোট মিল: <b style="color:var(--primary)" id="ofms-mpcl-total-meals">0.00</b></span>
+        <span>মোট বিল: <b style="color:var(--danger)" id="ofms-mpcl-total-bill">৳0.00</b></span>
+      </div>
+      <div id="ofms-mpcl-entry" style="display:none">
+        <!-- Breakfast -->
+        <div class="meal-card">
+          <div class="meal-hd">
+            <div><div class="meal-title">🌤️ সকাল — Breakfast</div><div class="meal-sub" id="ofms-cfg-mpcl-b">মিল মান: ০.৭৫</div></div>
+          </div>
+          <div class="pqo-row">
+            <input type="number" id="ofms-qty-mpcl-b" class="qty-input" min="0" max="5000" value="1" oninput="ofmsCalcMeal('mpcl','b')">
+            <button class="pqo-btn" id="ofms-btn-mpcl-b-P" onclick="ofmsSetPQO('mpcl','b','P')">P<small>Plant</small></button>
+            <button class="pqo-btn" id="ofms-btn-mpcl-b-Q" onclick="ofmsSetPQO('mpcl','b','Q')">Q<small>Quarter</small></button>
+            <button class="pqo-btn seloff" id="ofms-btn-mpcl-b-off" onclick="ofmsSetPQO('mpcl','b','off')">off<small>বন্ধ</small></button>
+          </div>
+          <div class="calc-info" id="ofms-calc-mpcl-b">বন্ধ</div>
+        </div>
+        <!-- Lunch -->
+        <div class="meal-card">
+          <div class="meal-hd">
+            <div><div class="meal-title">☀️ দুপুর — Lunch</div><div class="meal-sub" id="ofms-cfg-mpcl-l">মিল মান: ১.৫</div></div>
+          </div>
+          <div class="pqo-row">
+            <input type="number" id="ofms-qty-mpcl-l" class="qty-input" min="0" max="5000" value="1" oninput="ofmsCalcMeal('mpcl','l')">
+            <button class="pqo-btn" id="ofms-btn-mpcl-l-P" onclick="ofmsSetPQO('mpcl','l','P')">P<small>Plant</small></button>
+            <button class="pqo-btn selQ" id="ofms-btn-mpcl-l-Q" onclick="ofmsSetPQO('mpcl','l','Q')">Q<small>Quarter</small></button>
+            <button class="pqo-btn" id="ofms-btn-mpcl-l-off" onclick="ofmsSetPQO('mpcl','l','off')">off<small>বন্ধ</small></button>
+          </div>
+          <div class="calc-info" id="ofms-calc-mpcl-l">বন্ধ</div>
+        </div>
+        <!-- Dinner -->
+        <div class="meal-card">
+          <div class="meal-hd">
+            <div><div class="meal-title">🌙 রাত — Dinner</div><div class="meal-sub" id="ofms-cfg-mpcl-d">মিল মান: ০.৭৫</div></div>
+          </div>
+          <div class="pqo-row">
+            <input type="number" id="ofms-qty-mpcl-d" class="qty-input" min="0" max="5000" value="1" oninput="ofmsCalcMeal('mpcl','d')">
+            <button class="pqo-btn" id="ofms-btn-mpcl-d-P" onclick="ofmsSetPQO('mpcl','d','P')">P<small>Plant</small></button>
+            <button class="pqo-btn" id="ofms-btn-mpcl-d-Q" onclick="ofmsSetPQO('mpcl','d','Q')">Q<small>Quarter</small></button>
+            <button class="pqo-btn seloff" id="ofms-btn-mpcl-d-off" onclick="ofmsSetPQO('mpcl','d','off')">off<small>বন্ধ</small></button>
+          </div>
+          <div class="calc-info" id="ofms-calc-mpcl-d">বন্ধ</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">📝 নোট (ঐচ্ছিক)</label>
+          <input type="text" id="ofms-mpcl-note" class="form-input" placeholder="ঠিকাদার, কারণ...">
+        </div>
+        <button class="btn btn-accent" onclick="saveOfficeMeal('mpcl')" style="margin-bottom:8px">✅ মিল সেভ করুন</button>
+        <button class="btn btn-outline" onclick="toggleOfficeMealEntry('mpcl')">✕ বন্ধ করুন</button>
+      </div>
+      <button id="ofms-mpcl-toggle" class="btn btn-outline" style="margin-top:6px" onclick="toggleOfficeMealEntry('mpcl')">✏️ মিল এন্ট্রি করুন</button>
+    </div>
+
+    <!-- ── নোট ইতিহাস — বাজারের মতো ── -->
+    <div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="sec-title" style="margin:0">📝 নোট ইতিহাস</div>
+        <select id="ofms-note-month-sel" class="form-input" style="width:auto;min-width:160px;padding:6px 10px;font-size:13px" onchange="renderOfficeMealNotesScreen()"><option value="">-- মাস সিলেক্ট করুন --</option></select>
+      </div>
+      <div id="ofms-notes-history"><p class="muted tc">কোনো নোট নেই</p></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ MESS MANAGER LIST SCREEN ═══════════ -->
+<div id="sc-messmanager" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">মেস ম্যানেজার</div>
+    <div class="header-sub">এই মাসের ম্যানেজার তালিকা</div>
+  </div>
+  <div class="content">
+    <div class="card" style="margin-bottom:12px;background:linear-gradient(135deg,var(--primary-dark),var(--primary));color:#fff;border:none;">
+      <div style="font-size:12px;opacity:.8;letter-spacing:1px;text-transform:uppercase">মেস মাস</div>
+      <div style="font-size:16px;font-weight:700;margin-top:4px" id="mm-screen-month">লোড হচ্ছে...</div>
+    </div>
+    <div id="mm-list"><p class="muted tc">কোনো ম্যানেজার নির্ধারিত নেই</p></div>
+  </div>
+</div>
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div id="sc-login" class="screen">
+  <div class="app-header">
+    <div class="header-title">Midland Quarter</div>
+    <div class="header-sub">মেস ম্যানেজমেন্ট সিস্টেম</div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="sec-title">🔐 Login করুন</div>
+      <div id="login-alert" class="alert alert-danger"></div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <div style="position:relative">
+          <input type="email" id="login-user" class="form-input" placeholder="আপনার Email Address লিখুন" style="padding-right:90px" oninput="onLoginEmailInput()">
+          <label id="save-id-label" onclick="toggleSaveId()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:3px 8px;transition:border-color .2s,background .2s;" title="Email সেভ করুন">
+            <span id="save-id-box" style="width:15px;height:15px;border:1.5px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;background:#fff;transition:all .18s;flex-shrink:0;">
+              <svg id="save-id-tick" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polyline points="2,6 5,9 10,3"/></svg>
+            </span>
+            <span style="font-size:10px;font-weight:600;color:var(--text-light);white-space:nowrap;letter-spacing:.3px;">Save ID</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div style="position:relative">
+          <input type="password" id="login-pass" class="form-input" placeholder="পাসওয়ার্ড লিখুন" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:46px">
+          <button type="button" onclick="togglePassVis('login-pass','eye-login')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:var(--text-light);display:flex;align-items:center;justify-content:center;" aria-label="পাসওয়ার্ড দেখুন">
+            <svg id="eye-login" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <label class="chk-row"><input type="checkbox" id="remember-me"><span>Login মনে রাখো (Stay signed in)</span></label>
+      <button class="btn btn-primary" onclick="doLogin()">Login করুন</button>
+      <span class="link-txt" onclick="showSc('forgot')">🔑 Forgot Password?</span>
+      <span class="link-txt" onclick="showSc('register')">নতুন অ্যাকাউন্ট তৈরি করুন →</span>
+    </div>
+
+    <!-- ── Email Verification Notice Card (shown after registration) ── -->
+    <div id="verify-card" style="display:none;margin-top:14px;background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:22px 18px;text-align:center;border:2px solid #4CAF50;">
+      <div style="font-size:44px;margin-bottom:10px">📬</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">ইমেইল Verify করুন</div>
+      <div style="font-size:13px;color:var(--text-light);line-height:1.7;margin-bottom:12px">
+        <b id="verify-email-display" style="color:var(--primary)"></b> ঠিকানায়<br>একটি Verification লিংক পাঠানো হয়েছে।<br>
+        ইনবক্স (বা Spam ফোল্ডার) চেক করুন এবং<br>লিংকে ক্লিক করে অ্যাকাউন্ট সক্রিয় করুন।
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.6;">
+        ✅ Verify করা হলে উপরের <b>Login</b> ফর্ম দিয়ে প্রবেশ করুন।
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:10px">ইমেইল পাননি?</div>
+        <button id="resend-btn" onclick="doResendFromCard()" class="btn" style="background:var(--bg);color:var(--primary);border:1.5px solid var(--primary);padding:10px 20px;font-size:13px;font-weight:600;border-radius:10px;width:100%;cursor:pointer;">
+          🔄 পুনরায় Verification ইমেইল পাঠান
+        </button>
+        <div id="resend-msg" style="margin-top:8px;font-size:12px;min-height:18px;color:#4CAF50;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ REGISTER ═══════════ -->
+<div id="sc-register" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="showSc('login')">← Back</button>
+    <div class="header-title">নতুন অ্যাকাউন্ট</div>
+    <div class="header-sub">Register করুন</div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div id="reg-alert" class="alert alert-danger"></div>
+      <div id="reg-ok" class="alert alert-success"></div>
+      <div class="form-group"><label class="form-label">পুরো নাম *</label><input type="text" id="reg-name" class="form-input" placeholder="আপনার পুরো নাম"></div>
+      <div class="form-group"><label class="form-label">Mobile Number * (01XXXXXXXXX)</label><input type="tel" id="reg-mobile" class="form-input" placeholder="01XXXXXXXXX" maxlength="11"></div>
+      <div class="form-group"><label class="form-label">Email Address * (Password Reset এর জন্য)</label><input type="email" id="reg-email" class="form-input" placeholder="example@email.com"></div>
+      <div class="form-group"><label class="form-label">Mess ID / Job ID *</label><input type="text" id="reg-jobid" class="form-input" placeholder="যেমন: 1120"></div>
+      <div class="form-group"><label class="form-label">Password * (কমপক্ষে ৬ ক্যারেক্টার)</label>
+        <div style="position:relative">
+          <input type="password" id="reg-pass" class="form-input" placeholder="পাসওয়ার্ড" style="padding-right:46px">
+          <button type="button" onclick="togglePassVis('reg-pass','eye-reg')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:var(--text-light);display:flex;align-items:center;justify-content:center;">
+            <svg id="eye-reg" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">রুম নম্বর</label><input type="text" id="reg-room" class="form-input" placeholder="যেমন: 101"></div>
+      <div class="form-group">
+        <label class="form-label">সদস্যের ধরন</label>
+        <select id="reg-type" class="form-input">
+          <option value="inside">ইনসাইড (মেসে থাকেন)</option>
+          <option value="outside">আউটসাইড (বাইরে থাকেন)</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="doRegister()">Register করুন</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ FORGOT ═══════════ -->
+<div id="sc-forgot" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="showSc('login')">← Back</button>
+    <div class="header-title">Password Reset</div>
+    <div class="header-sub">ইমেইলে লিংক পাঠানো হবে</div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:40px;margin-bottom:8px">📧</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">পাসওয়ার্ড রিসেট করুন</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:6px;line-height:1.6">আপনার রেজিস্টার করা ইমেইল দিন।<br>রিসেট লিংক পাঠানো হবে।</div>
+      </div>
+      <div id="fgt-alert" class="alert alert-danger"></div>
+      <div id="fgt-ok" class="alert alert-success"></div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="fgt-email" class="form-input" placeholder="আপনার রেজিস্টার করা ইমেইল">
+      </div>
+      <button class="btn btn-primary" id="fgt-btn" onclick="doForgot()">📧 Reset Link পাঠান</button>
+      <span class="link-txt" onclick="showSc('login')">← Login এ ফিরে যান</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ HOME ═══════════ -->
+<div id="sc-home" class="screen">
+  <div class="app-header">
+    <div class="header-title">Midland Quarter</div>
+    <div class="header-sub" id="home-mgr">লোড হচ্ছে...</div>
+    <div class="header-actions">
+      <div class="header-actions" id="home-header-actions"></div>
+    </div>
+  </div>
+  <div class="content pb-nav">
+    <!-- PWA Install Button -->
+    <div id="pwa-install-btn" onclick="triggerPWAInstall()" style="display:none;background:linear-gradient(135deg,#1a6b3c,#228b4a);color:#fff;border-radius:12px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px;cursor:pointer;box-shadow:0 2px 12px rgba(26,107,60,0.3);">
+      <span style="font-size:22px">📲</span>
+      <div>
+        <div style="font-weight:700;font-size:13px">App হিসেবে Install করুন</div>
+        <div style="font-size:11px;opacity:.85">Home Screen এ যোগ করুন — Offline কাজ করবে</div>
+      </div>
+      <span style="margin-left:auto;font-size:18px">›</span>
+    </div>
+    <div class="welcome-bar">
+      <div><div class="date-bar" id="home-date"></div></div>
+      <span class="welcome-role" id="home-role">Member</span>
+    </div>
+    <!-- Today card -->
+    <div class="today-card" style="position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div style="flex:1">
+          <div class="today-hd" id="td-date">তারিখ: --</div>
+          <div class="today-day" id="td-day">--</div>
+          <div id="td-viewing-badge" style="display:none;font-size:10px;background:var(--accent-light);color:#7a4800;border-radius:12px;padding:2px 10px;margin-top:4px;"></div>
+        </div>
+        <button onclick="downloadDayPDF()" title="দৈনিক PDF রিপোর্ট" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">⬇ PDF</button>
+      </div>
+      <!-- Date navigation for browsing other days -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;">
+        <button onclick="homeShiftDate(-1)" style="background:var(--primary);color:#fff;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">‹</button>
+        <div style="flex:1;text-align:center;">
+          <div id="td-nav-label" style="font-size:12px;color:var(--text-light);font-weight:500;"></div>
+        </div>
+        <button onclick="homeShiftDate(1)" id="td-next-btn" style="background:var(--primary);color:#fff;border:none;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">›</button>
+      </div>
+      <div class="meal-pills">
+        <div class="mpill b" onclick="showWhoEatsDate('b')">🌅 সকাল <b id="td-b">0</b></div>
+        <div class="mpill l" onclick="showWhoEatsDate('l')">☀️ দুপুর <b id="td-l">0</b></div>
+        <div class="mpill d" onclick="showWhoEatsDate('d')">🌙 রাত <b id="td-d">0</b></div>
+      </div>
+      <div class="today-total">মোট: <b id="td-total">0.00</b> মিল</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card" onclick="showMyMealHistory()" style="cursor:pointer;border:1px solid var(--primary)">
+        <div class="stat-num" id="st-month">0.00</div>
+        <div class="stat-lbl">এই মাসের মিল <span style="font-size:10px">↗</span></div>
+      </div>
+      <div class="stat-card" onclick="showAllMembersBill()" style="cursor:pointer;border:1px solid var(--border);">
+        <div class="stat-num" id="st-bill" style="color:var(--accent)">৳ 0</div>
+        <div class="stat-lbl">মিল রেট <span style="font-size:10px;color:var(--accent)">↗ আমার হিসাব</span></div>
+      </div>
+    </div>
+    <!-- Quick Actions -->
+    <div class="menu-grid menu-grid-bot">
+      <div class="menu-item" onclick="sec('meal')"><div class="menu-icon">🍽️</div><div class="menu-lbl">মিল আপডেট</div><div class="menu-sub">Meal Update</div></div>
+      <div class="menu-item ac" id="menu-bazar" onclick="sec('bazar')" style="display:none"><div class="menu-icon">🛒</div><div class="menu-lbl">বাজার খরচ</div><div class="menu-sub">Bazar Entry</div></div>
+      <div class="menu-item in" id="menu-others" onclick="sec('others')" style="display:none"><div class="menu-icon">⚡</div><div class="menu-lbl">অন্যান্য খরচ</div><div class="menu-sub">Others Expense</div></div>
+      <div class="menu-item ac" id="menu-deposit" onclick="sec('deposit')" style="display:none"><div class="menu-icon">💵</div><div class="menu-lbl">জমা/উত্তোলন</div><div class="menu-sub">Deposit/Withdraw</div></div>
+      <div class="menu-item in" id="menu-officemeal" onclick="sec('officemeal')" style="display:none"><div class="menu-icon">🏢</div><div class="menu-lbl">অফিস মিল</div><div class="menu-sub">MEPL / MPCL</div></div>
+      <div class="menu-item" onclick="sec('report')"><div class="menu-icon">📊</div><div class="menu-lbl">মাসিক রিপোর্ট</div><div class="menu-sub">Monthly Report</div></div>
+      <div class="menu-item" onclick="sec('members')"><div class="menu-icon">👥</div><div class="menu-lbl">সদস্য তালিকা</div><div class="menu-sub">All Members</div></div>
+      <div class="menu-item in" id="menu-rules" onclick="sec('rules')"><div class="menu-icon">📋</div><div class="menu-lbl">নিয়মাবলী</div><div class="menu-sub">Rules</div></div>
+      <div class="menu-item dg" id="admin-btn" onclick="sec('admin')" style="display:none"><div class="menu-icon">⚙️</div><div class="menu-lbl">Admin Panel</div><div class="menu-sub">পরিচালনা</div></div>
+    </div>
+  </div>
+  <div class="bottom-nav">
+    <button class="nav-btn active" onclick="goHome()"><span class="nav-icon">🏠</span>হোম</button>
+    <button class="nav-btn" onclick="sec('meal')"><span class="nav-icon">🍽️</span>মিল</button>
+    <button class="nav-btn" onclick="sec('notice')"><span class="nav-icon">📢</span>নোটিশ</button>
+    <button class="nav-btn" onclick="sec('members')"><span class="nav-icon">👥</span>সদস্য</button>
+    <button class="nav-btn" onclick="sec('profile')"><span class="nav-icon">👤</span>প্রোফাইল</button>
+  </div>
+</div>
+
+<!-- ═══════════ MEAL ═══════════ -->
+<div id="sc-meal" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">মিল আপডেট</div>
+    <div class="header-sub" id="meal-sub">Meal Update</div>
+  </div>
+  <div class="content pb-nav">
+    <div class="card">
+      <div class="sec-title">📅 তারিখ নির্বাচন</div>
+      <div class="date-nav">
+        <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
+        <span class="date-display-wrap" style="flex:1"><input type="date" id="meal-date" class="form-input" style="width:100%" onchange="loadMealDate();updateDateLabel('meal-date')"><span class="date-display-label" id="meal-date-lbl">-- তারিখ --</span></span>
+        <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
+      </div>
+    </div>
+    <div id="meal-lock-notice" class="alert alert-danger" style="display:none">🔒 এই তারিখের মিল পরিবর্তন করা যাবে না। রাত ১১টার পর পরবর্তী দিনের মিলও পরিবর্তন করা যাবে না। Manager এর মাধ্যমে করুন।</div>
+    <div class="card" style="padding:14px 18px;">
+      <div class="legend">
+        <span class="tag-P">P = প্ল্যান্ট</span>
+        <span class="tag-Q">Q = কোয়ার্টার</span>
+        <span class="tag-off">off = বন্ধ</span>
+      </div>
+      <p style="font-size:11px;color:var(--text-light);margin-top:6px">সংখ্যা × মিল মান = মোট মিল। যেমন সকালে ২ দিলে = ২×০.৭৫ = ১.৫ মিল</p>
+    </div>
+    <!-- Breakfast -->
+    <div class="meal-card">
+      <div class="meal-hd">
+        <div><div class="meal-title">🌤️ সকাল — Breakfast</div><div class="meal-sub" id="cfg-b">মিল মান: ০.৭৫</div></div>
+        <div id="lock-b" class="lock-badge" style="display:none">🔒 Locked</div>
+      </div>
+      <div class="pqo-row">
+        <input type="number" id="qty-b" class="qty-input" min="0" max="5000" value="1" oninput="calcMeal('b')">
+        <button class="pqo-btn" id="btn-b-P" onclick="setPQO('b','P')">P<small>Plant</small></button>
+        <button class="pqo-btn" id="btn-b-Q" onclick="setPQO('b','Q')">Q<small>Quarter</small></button>
+        <button class="pqo-btn" id="btn-b-off" onclick="setPQO('b','off')">off<small>বন্ধ</small></button>
+      </div>
+      <div class="calc-info" id="calc-b">বন্ধ</div>
+    </div>
+    <!-- Lunch -->
+    <div class="meal-card">
+      <div class="meal-hd">
+        <div><div class="meal-title">☀️ দুপুর — Lunch</div><div class="meal-sub" id="cfg-l">মিল মান: ১.৫</div></div>
+        <div id="lock-l" class="lock-badge" style="display:none">🔒 Locked</div>
+      </div>
+      <div class="pqo-row">
+        <input type="number" id="qty-l" class="qty-input" min="0" max="5000" value="1" oninput="calcMeal('l')">
+        <button class="pqo-btn" id="btn-l-P" onclick="setPQO('l','P')">P<small>Plant</small></button>
+        <button class="pqo-btn" id="btn-l-Q" onclick="setPQO('l','Q')">Q<small>Quarter</small></button>
+        <button class="pqo-btn" id="btn-l-off" onclick="setPQO('l','off')">off<small>বন্ধ</small></button>
+      </div>
+      <div class="calc-info" id="calc-l">বন্ধ</div>
+    </div>
+    <!-- Dinner -->
+    <div class="meal-card">
+      <div class="meal-hd">
+        <div><div class="meal-title">🌙 রাত — Dinner</div><div class="meal-sub" id="cfg-d">মিল মান: ০.৭৫</div></div>
+        <div id="lock-d" class="lock-badge" style="display:none">🔒 Locked</div>
+      </div>
+      <div class="pqo-row">
+        <input type="number" id="qty-d" class="qty-input" min="0" max="5000" value="1" oninput="calcMeal('d')">
+        <button class="pqo-btn" id="btn-d-P" onclick="setPQO('d','P')">P<small>Plant</small></button>
+        <button class="pqo-btn" id="btn-d-Q" onclick="setPQO('d','Q')">Q<small>Quarter</small></button>
+        <button class="pqo-btn" id="btn-d-off" onclick="setPQO('d','off')">off<small>বন্ধ</small></button>
+      </div>
+      <div class="calc-info" id="calc-d">বন্ধ</div>
+    </div>
+    <button class="btn btn-primary" id="save-meal-btn" onclick="saveMeal()">✅ মিল সেভ করুন</button>
+  </div>
+</div>
+
+<!-- ═══════════ BAZAR ═══════════ -->
+<div id="sc-bazar" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">বাজার খরচ</div>
+    <div class="header-sub" id="bazar-header-sub">Bazar Entry</div>
+  </div>
+  <div class="content pb-nav">
+    <div id="bazar-readonly-notice" style="display:none"></div>
+    <div id="bazar-form-wrap">
+      <div class="card">
+        <div class="sec-title">➕ বাজার যোগ করুন</div>
+        <div class="form-group"><label class="form-label">বিবরণ</label><textarea id="bz-desc" class="form-input" placeholder="মাছ, সবজি, তেল..." rows="2" style="resize:none"></textarea></div>
+        <div class="form-group"><label class="form-label">পরিমাণ ৳</label><input type="number" id="bz-amt" class="form-input" placeholder="টাকার পরিমাণ" min="1" step="0.01"></div>
+        <div class="form-group"><label class="form-label">তারিখ</label><span class="date-display-wrap"><input type="date" id="bz-date" class="form-input" style="width:100%" onchange="updateDateLabel('bz-date')"><span class="date-display-label" id="bz-date-lbl">-- তারিখ --</span></span></div>
+        <button class="btn btn-accent" onclick="addBazar()">➕ যোগ করুন</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="sec-title" style="margin:0">📋 এই মাসের বাজার</div>
+        <select id="bz-month-sel" class="form-input" style="width:auto;padding:6px 10px;font-size:13px" onchange="renderBazar()"></select>
+      </div>
+      <div id="bz-list"><p class="muted tc">কোনো এন্ট্রি নেই</p></div>
+      <div class="divider"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>মোট খরচ:</b><span style="font-weight:700;font-size:20px;color:var(--primary)" id="bz-total">৳ ০</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OTHERS EXPENSE ═══════════ -->
+<div id="sc-others" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">অন্যান্য খরচ</div>
+    <div class="header-sub" id="others-header-sub">Others Expense</div>
+  </div>
+  <div class="content pb-nav">
+    <div id="others-readonly-notice" style="display:none"></div>
+    <!-- OTHERS PANEL — একমাত্র tab -->
+    <div id="oth-panel-others">
+      <div id="others-form-wrap">
+        <div class="card">
+          <div class="sec-title">➕ অন্যান্য খরচ যোগ করুন</div>
+          <!-- Split rule for this entry -->
+          <div class="form-group">
+            <label class="form-label">ভাগের নিয়ম</label>
+            <select id="oth-split" class="form-input">
+              <option value="equal">সবার মধ্যে সমান ভাগ</option>
+              <option value="outside50">Outside সদস্য ৫০% দেবে</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">বিবরণ</label><textarea id="oth-desc" class="form-input" placeholder="গ্যাস বিল, বিদ্যুৎ বিল, মেরামত..." rows="2" style="resize:none"></textarea></div>
+          <div class="form-group"><label class="form-label">পরিমাণ ৳</label><input type="number" id="oth-amt" class="form-input" placeholder="টাকার পরিমাণ" min="1" step="0.01"></div>
+          <div class="form-group"><label class="form-label">তারিখ</label><span class="date-display-wrap"><input type="date" id="oth-date" class="form-input" style="width:100%" onchange="updateDateLabel('oth-date')"><span class="date-display-label" id="oth-date-lbl">-- তারিখ --</span></span></div>
+          <button class="btn btn-primary" onclick="addOther()">➕ যোগ করুন</button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title" style="margin:0">📋 এই মাসের অন্যান্য খরচ</div>
+          <select id="oth-month-sel" class="form-input" style="width:auto;padding:6px 10px;font-size:13px" onchange="renderOthers()"></select>
+        </div>
+        <div id="oth-list"><p class="muted tc">কোনো এন্ট্রি নেই</p></div>
+        <div class="divider"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><b>মোট:</b><span style="font-weight:700;font-size:20px;color:var(--info)" id="oth-total">৳ ০</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ DEPOSIT / WITHDRAW ═══════════ -->
+<div id="sc-deposit" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">&#8592; Home</button>
+    <div class="header-title">জমা / উত্তোলন</div>
+    <div class="header-sub">Deposit / Withdraw</div>
+  </div>
+  <div class="content pb-nav">
+
+    <!-- নিজের ব্যালেন্স সারসংক্ষেপ (সকল সদস্য দেখবে) -->
+    <div id="dep-my-bal-section">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="card" style="text-align:center;padding:14px 10px">
+          <div style="font-size:11px;color:var(--text-light);margin-bottom:4px">পূর্ববর্তী ব্যালেন্স</div>
+          <div id="dep-prev-bal" style="font-size:20px;font-weight:700;color:var(--primary)">&#2547; ০</div>
+        </div>
+        <div class="card" style="text-align:center;padding:14px 10px">
+          <div style="font-size:11px;color:var(--text-light);margin-bottom:4px">জমা</div>
+          <div id="dep-dep-bal" style="font-size:20px;font-weight:700;color:var(--info)">&#2547; ০</div>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px;margin-bottom:10px;background:linear-gradient(135deg,var(--primary-dark),var(--primary));border-radius:14px">
+        <div style="font-size:11px;color:rgba(255,255,255,.75);margin-bottom:4px">বর্তমান মোট ব্যালেন্স</div>
+        <div id="dep-total-bal" style="font-size:28px;font-weight:700;color:#fff">&#2547; ০</div>
+      </div>
+      <div class="card">
+        <div class="sec-title">&#128197; আমার লেনদেন ইতিহাস</div>
+        <div id="dep-my-history"><p class="muted tc">কোনো লেনদেন নেই</p></div>
+      </div>
+    </div>
+
+    <!-- ম্যানেজার / কন্ট্রোলার অংশ -->
+    <div id="dep-mgr-section" style="display:none">
+      <div class="card">
+        <div class="sec-title">&#128181; টাকা জমা / ফেরত</div>
+        <div class="form-group" style="position:relative;">
+          <input type="text" id="dep-mem-search" class="form-input" placeholder="🔍 Job ID লিখুন (যেমন: 1120)" autocomplete="off" oninput="depMemSearch()" onfocus="depMemSearch()">
+          <input type="hidden" id="dep-mem" value="">
+          <div id="dep-mem-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:2px solid var(--primary);border-radius:var(--radius-sm);z-index:500;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(26,107,60,0.15);"></div>
+          <div id="dep-mem-selected" style="display:none;margin-top:6px;padding:8px 12px;background:var(--success-light);border:1px solid #c8e6c9;border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--success);align-items:center;justify-content:space-between;">
+            <span id="dep-mem-selected-name">&#8212;</span>
+            <button onclick="clearDepMem()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;padding:0 4px;">&#10005;</button>
+          </div>
+        </div>
+        <div id="dep-bal-info" class="alert alert-info" style="display:none"></div>
+        <div class="form-group">
+          <label class="form-label">ধরন</label>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary btn-sm" id="dep-type-btn-dep" onclick="setDepType('deposit')" style="flex:1">&#128229; জমা (Deposit)</button>
+            <button class="btn btn-outline btn-sm" id="dep-type-btn-with" onclick="setDepType('withdraw')" style="flex:1">&#128228; উত্তোলন (Withdraw)</button>
+          </div>
+          <input type="hidden" id="dep-type" value="deposit">
+        </div>
+        <div class="form-group"><label class="form-label">পরিমাণ &#2547;</label><input type="number" id="dep-amt" class="form-input" placeholder="টাকার পরিমাণ" min="1"></div>
+        <div class="form-group"><label class="form-label">তারিখ</label><span class="date-display-wrap"><input type="date" id="dep-date" class="form-input" style="width:100%" onchange="updateDateLabel('dep-date')"><span class="date-display-label" id="dep-date-lbl">-- তারিখ --</span></span></div>
+        <div class="form-group"><label class="form-label">নোট (ঐচ্ছিক)</label><input type="text" id="dep-note" class="form-input" placeholder="মাসিক জমা, ফেরত..."></div>
+        <button class="btn btn-primary" onclick="saveDeposit()">&#9989; সম্পন্ন করুন</button>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="sec-title" style="margin:0">&#128203; লেনদেন ইতিহাস (সব সদস্য)</div>
+          <select id="dep-hist-month" class="form-input" style="width:auto;min-width:160px;padding:6px 10px;font-size:12px" onchange="renderDepHistory()"><option value="">-- মাস সিলেক্ট করুন --</option></select>
+        </div>
+        <div id="dep-history"><p class="muted tc">কোনো লেনদেন নেই</p></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ BILL / MEAL RATE ═══════════ -->
+<div id="sc-bill" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">মিল রেট ও বিল</div>
+    <div class="header-sub" id="bill-month-label">Meal Rate & Bill</div>
+  </div>
+  <div class="content">
+    <!-- Current month rate summary -->
+    <div class="card summary-hero-card" style="border:none;padding:22px;">
+      <div style="font-size:11px;opacity:.75;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px" id="bill-month-sub">মেস মাস</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:32px;font-weight:700;line-height:1" id="bl-rate-big">৳ 0</div>
+          <div style="font-size:11px;opacity:.75;margin-top:4px">প্রতি মিল রেট</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:20px;font-weight:700" id="bl-total-exp">৳ 0</div>
+          <div style="font-size:11px;opacity:.75;margin-top:2px">মোট খরচ</div>
+        </div>
+      </div>
+      <div class="summary-sub-grid">
+        <div><div style="opacity:.7">বাজার</div><div style="font-weight:700;font-size:13px;margin-top:2px" id="bl-bazar-s">৳0</div></div>
+        <div style="border-left:1px solid rgba(255,255,255,.2);border-right:1px solid rgba(255,255,255,.2)"><div style="opacity:.7">অন্যান্য</div><div style="font-weight:700;font-size:13px;margin-top:2px" id="bl-others-s">৳0</div></div>
+        <div><div style="opacity:.7">মোট মিল</div><div style="font-weight:700;font-size:13px;margin-top:2px" id="bl-meals-s">0</div></div>
+      </div>
+    </div>
+    <!-- Personal bill breakdown -->
+    <div class="card">
+      <div class="sec-title">💳 আমার এই মাসের বিল</div>
+      <div class="rep-row"><span class="rep-key">আমার মিল</span><span class="rep-val" id="bl-my-meals">০</span></div>
+      <div class="rep-row"><span class="rep-key">মিল বিল</span><span class="rep-val" id="bl-meal-bill">৳ ০</span></div>
+      <div class="rep-row"><span class="rep-key">অন্যান্য শেয়ার <span style="font-size:10px;color:var(--text-light)">(split নিয়ম অনুযায়ী)</span></span><span class="rep-val" id="bl-other-share">৳ ০</span></div>
+      <div class="rep-row"><span class="rep-key">বাবুর্চি খাবার ভাগ <span style="font-size:10px;color:var(--text-light)">(In=পূর্ণ, Out=৫০%)</span></span><span class="rep-val" id="bl-cook-food-share">৳ ০</span></div>
+      <div class="rep-row" style="display:none"><span class="rep-key">বাবুর্চি বেতন ভাগ</span><span class="rep-val" id="bl-cook-share">৳ ০</span></div>
+      <div class="divider"></div>
+      <div class="rep-row"><span class="rep-key" style="color:var(--danger);font-weight:700">মোট বিল</span><span class="rep-val" style="color:var(--danger);font-size:22px" id="bl-my-bill">৳ ০</span></div>
+      <div class="rep-row"><span class="rep-key">জমা আছে</span><span class="rep-val" style="color:var(--success)" id="bl-balance">৳ ০</span></div>
+      <div class="divider"></div>
+      <div class="rep-row">
+        <span style="font-weight:700;font-size:15px">নেট বাকি / জমা</span>
+        <span style="font-size:22px;font-weight:700" id="bl-net">৳ ০</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="makePDF('bill')">📄 PDF Download</button>
+  </div>
+</div>
+
+<!-- ═══════════ REPORT ═══════════ -->
+<div id="sc-report" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">মাসিক রিপোর্ট</div>
+    <div class="header-sub">Monthly Report</div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="sec-title">📅 মেস মাস নির্বাচন</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:10px">মেস মাস: ১১ তারিখ থেকে পরের মাসের ১০ তারিখ পর্যন্ত</p>
+      <select id="rpt-month" class="form-input" onchange="loadReport()">
+        <option value="">-- মাস নির্বাচন করুন --</option>
+      </select>
+      <button onclick="loadReport(true)" style="margin-top:8px;width:100%;padding:9px;border-radius:10px;border:1.5px dashed var(--primary);background:transparent;color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;">🔄 Refresh</button>
+    </div>
+    <div class="card"><div class="sec-title">📊 রিপোর্ট</div><div id="rpt-rows"><p class="muted tc">মাস নির্বাচন করুন</p></div></div>
+    <button class="btn btn-primary" onclick="makePDF('report')">🖨️ Print / PDF সেভ করুন</button>
+  </div>
+</div>
+
+<!-- ═══════════ MEMBERS ═══════════ -->
+<div id="sc-members" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">সদস্য তালিকা</div>
+    <div class="header-sub">All Members</div>
+  </div>
+  <div class="content pb-nav">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <input type="text" id="mem-search" class="form-input" placeholder="🔍 নাম, Job ID..." oninput="loadMembers()" style="flex:1;margin:0;">
+      <button id="mgr-toggle-btn" onclick="toggleManagerView()" style="white-space:nowrap;padding:10px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;">👑 ম্যানেজার</button>
+    </div>
+    <!-- Manager list (hidden by default) -->
+    <div id="mgr-list-panel" style="display:none;margin-bottom:12px;">
+      <div class="card" id="mgr-list-content"><p class="muted tc">লোড হচ্ছে...</p></div>
+    </div>
+    <div class="card">
+  <div id="mem-count-bar" style="font-size:12px;color:var(--text-light);padding:0 4px 8px;font-weight:600;"></div>
+  <div id="mem-list"></div>
+</div>
+  </div>
+</div>
+
+<!-- ═══════════ MEMBER DETAIL ═══════════ -->
+<div id="sc-memdetail" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="sec('members')">← সদস্য তালিকা</button>
+    <div class="header-title" id="memdet-title">সদস্য বিবরণ</div>
+    <div class="header-sub" id="memdet-sub">—</div>
+  </div>
+  <div class="content pb-nav">
+    <div class="card tc" id="memdet-info"></div>
+    <div class="tab-strip">
+      <button class="tab-btn active" onclick="memdetTab('meals')">🍽️ মিল</button>
+      <button class="tab-btn" onclick="memdetTab('txn')">💵 লেনদেন</button>
+    </div>
+    <div class="card" id="memdet-meals-card"></div>
+    <div class="card" id="memdet-txn-card" style="display:none"></div>
+    <!-- Manager actions -->
+    <div id="memdet-mgr-actions" style="display:none">
+      <button class="btn btn-danger" id="memdet-block-btn" onclick="toggleBlockMember()">🚫 ব্লক করুন</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PROFILE ═══════════ -->
+<div id="sc-profile" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">আমার প্রোফাইল</div>
+  </div>
+  <div class="content">
+
+    <!-- ── Avatar + Name + Role ── -->
+    <div class="card" style="text-align:center;padding-bottom:6px">
+      <div class="prof-av" id="pf-av">?</div>
+      <div class="prof-name" id="pf-name">-</div>
+      <div class="prof-role" id="pf-role">-</div>
+    </div>
+
+
+
+    <!-- ── Profile Info (view mode) ── -->
+    <div class="card" id="pf-view-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="sec-title" style="margin:0">👤 ব্যক্তিগত তথ্য</div>
+        <button onclick="pfEditMode(true)" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✏️ Edit</button>
+      </div>
+      <div class="prof-row"><span style="color:var(--text-light)">📛 নাম</span><b id="pf-view-name">-</b></div>
+      <div class="prof-row"><span style="color:var(--text-light)">🪪 ID</span><b id="pf-view-id" style="font-family:monospace;letter-spacing:0.5px">-</b></div>
+      <div class="prof-row"><span style="color:var(--text-light)">📱 মোবাইল</span><b id="pf-view-mob">-</b></div>
+      <div class="prof-row"><span style="color:var(--text-light)">🏠 রুম নম্বর</span><b id="pf-view-room">-</b></div>
+      <div class="prof-row"><span style="color:var(--text-light)">📧 ইমেইল</span><span id="pf-view-email" style="font-size:13px">-</span></div>
+      <div class="prof-row" style="border:none"><span style="color:var(--text-light)">🏡 ঠিকানা</span><span id="pf-view-addr" style="font-size:13px;text-align:right;max-width:60%">-</span></div>
+      <div class="prof-row" style="border:none;margin-top:4px;">
+        <span style="color:var(--text-light)">🎨 থিম</span>
+        <div style="display:flex;gap:0;border-radius:20px;overflow:hidden;border:1.5px solid var(--border);">
+          <button id="theme-day-btn" onclick="setTheme('day')" style="padding:5px 18px;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .2s;background:var(--primary);color:#fff;">☀️ Day</button>
+          <button id="theme-night-btn" onclick="setTheme('night')" style="padding:5px 18px;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all .2s;background:transparent;color:var(--text-light);">🌙 Night</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Profile Edit (edit mode, hidden by default) ── -->
+    <div class="card" id="pf-edit-card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="sec-title" style="margin:0">✏️ তথ্য সম্পাদনা</div>
+        <button onclick="pfEditMode(false)" style="background:var(--bg);color:var(--text-light);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit">✕ বাতিল</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">নাম</label>
+        <input type="text" id="pf-edit-name" class="form-input" placeholder="আপনার নাম">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mess ID / Job ID</label>
+        <input type="text" id="pf-edit-job" class="form-input" placeholder="যেমন: 1120">
+      </div>
+      <input type="hidden" id="pf-edit-id">
+      <div class="form-group">
+        <label class="form-label">মোবাইল নম্বর</label>
+        <input type="tel" id="pf-edit-mob" class="form-input" placeholder="01XXXXXXXXX">
+      </div>
+      <div class="form-group">
+        <label class="form-label">রুম নম্বর</label>
+        <input type="text" id="pf-edit-room" class="form-input" placeholder="রুম নম্বর">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ইমেইল <span style="font-size:11px;color:var(--text-light)">(ঐচ্ছিক)</span></label>
+        <input type="email" id="pf-edit-email" class="form-input" placeholder="example@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">ঠিকানা</label>
+        <input type="text" id="pf-edit-addr" class="form-input" placeholder="আপনার ঠিকানা">
+      </div>
+      <button class="btn btn-primary" onclick="saveProfile()">💾 সংরক্ষণ করুন</button>
+    </div>
+
+    <!-- ── TX History ── -->
+    <div class="card">
+      <div class="sec-title">💵 লেনদেন ইতিহাস</div>
+      <div id="pf-tx-list"><p class="muted tc">কোনো লেনদেন নেই</p></div>
+    </div>
+
+    <button class="btn btn-danger" onclick="confirmLogout()">🚪 Logout</button>
+  </div>
+</div>
+
+<!-- ═══════════ ADMIN ═══════════ -->
+<div id="sc-admin" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">Admin Panel</div>
+    <div class="header-sub" id="admin-panel-sub">পরিচালনা কেন্দ্র</div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="sec-title">⚙️ Admin কার্যক্রম</div>
+      <div class="adm-item ctrl-only" onclick="tog('card-approval');initApprovalPanel()"><div class="adm-icon">🔔</div><div><div class="adm-lbl">সদস্য অনুমোদন <span id="approval-badge" style="display:none;background:var(--danger);color:#fff;border-radius:50%;padding:1px 7px;font-size:12px;font-weight:700;margin-left:4px;vertical-align:middle"></span></div><div class="adm-sub">নতুন রেজিস্ট্রেশন অনুমোদন / প্রত্যাখ্যান করুন</div></div></div>
+      <div class="adm-item ctrl-only" onclick="tog('card-mgr')"><div class="adm-icon">👑</div><div><div class="adm-lbl">ম্যানেজার নিয়োগ</div><div class="adm-sub">প্রতি মাসের ম্যানেজার সেট করুন (সর্বোচ্চ ১০ জন)</div></div></div>
+      <div class="adm-item" onclick="tog('card-adm-meal')"><div class="adm-icon">🔓</div><div><div class="adm-lbl">যেকোনো সদস্যের মিল এডিট</div><div class="adm-sub">যেকোনো তারিখ — Lock নেই</div></div></div>
+      <div class="adm-item ctrl-only" onclick="tog('card-edit-mem')"><div class="adm-icon">✏️</div><div><div class="adm-lbl">সদস্যের তথ্য সম্পাদনা</div><div class="adm-sub">নাম, রুম, ফোন, ধরন পরিবর্তন</div></div></div>
+      <div class="adm-item ctrl-only" onclick="tog('card-del-mem')"><div class="adm-icon">🗑️</div><div><div class="adm-lbl">সদস্য মুছে ফেলুন</div><div class="adm-sub">মেস ছেড়ে যাওয়া সদস্য ডিলিট</div></div></div>
+      <div class="adm-item ctrl-only" onclick="tog('card-del-cycle')"><div class="adm-icon">🗓️</div><div><div class="adm-lbl">মেস চক্র ডিলিট</div><div class="adm-sub">সম্পন্ন চক্রের ডেটা Firebase থেকে মুছুন</div></div></div>
+      <div class="adm-item ctrl-only" onclick="tog('card-ctrl')"><div class="adm-icon">⭐</div><div><div class="adm-lbl">Controller নিয়োগ</div><div class="adm-sub">নতুন Controller যোগ/বাদ দিন</div></div></div>
+      <div class="adm-item" onclick="tog('card-sitenote')"><div class="adm-icon">📍</div><div><div class="adm-lbl">ঠিকানা / সাইট নোট</div><div class="adm-sub">Home এ দেখানো ঠিকানা বা শর্ট নোট</div></div></div>
+      <div class="adm-item" onclick="sec('notice')"><div class="adm-icon">📢</div><div><div class="adm-lbl">নোটিশ বোর্ড</div><div class="adm-sub">নোটিশ লিখুন ও পপআপ নিয়ন্ত্রণ করুন</div></div></div>
+      <div class="adm-item ctrl-only" onclick="tog('card-handover');initHandoverCard()" style="border-left:3px solid var(--accent);padding-left:12px"><div class="adm-icon">🔄</div><div><div class="adm-lbl">মাস হস্তান্তর</div><div class="adm-sub">মাস শেষে নেট ব্যালেন্স পরবর্তী মাসে স্থানান্তর করুন</div></div></div>
+    </div>
+
+    <!-- Manager Card -->
+    <!-- Approval Card (ctrl-only) -->
+    <div class="card" id="card-approval" style="display:none">
+      <div class="sec-title">🔔 সদস্য অনুমোদন</div>
+      <div id="approval-list"><div style="text-align:center;padding:16px;opacity:.6">⏳ লোড হচ্ছে...</div></div>
+    </div>
+
+    <div class="card" id="card-mgr" style="display:none">
+      <div class="sec-title">👑 ম্যানেজার নিয়োগ</div>
+      <div class="form-group"><label class="form-label">মেস মাস</label><select id="mgr-month" class="form-input"></select></div>
+      <div id="mgr-current" style="margin-bottom:12px;font-size:13px;color:var(--text-light)"></div>
+      <div class="form-group"><label class="form-label">সদস্য নির্বাচন করুন (ম্যানেজার)</label><select id="mgr-sel" class="form-input"><option value="">-- সদস্য নির্বাচন --</option></select></div>
+      <button class="btn btn-primary btn-sm" onclick="setManager()" style="width:100%;margin-bottom:8px">✅ ম্যানেজার যোগ করুন</button>
+      <div class="form-group" style="margin-top:12px"><label class="form-label">ম্যানেজার বাদ দিন</label><select id="mgr-remove" class="form-input"><option value="">-- ম্যানেজার নির্বাচন --</option></select></div>
+      <button class="btn btn-danger btn-sm" onclick="removeManager()" style="width:100%">❌ ম্যানেজার বাদ দিন</button>
+    </div>
+
+    <!-- Admin Meal Edit -->
+    <div class="card" id="card-adm-meal" style="display:none">
+      <div class="sec-title">🔓 মিল এডিট</div>
+      <div class="form-group"><label class="form-label">সদস্য</label><select id="adm-mem" class="form-input" onchange="loadAdmMeal()"><option value="">-- নির্বাচন --</option></select></div>
+      <div class="form-group"><label class="form-label">তারিখ</label><span class="date-display-wrap"><input type="date" id="adm-dt" class="form-input" style="width:100%" onchange="loadAdmMeal();updateDateLabel('adm-dt')"><span class="date-display-label" id="adm-dt-lbl">-- তারিখ --</span></span></div>
+      <div id="adm-pqo" style="display:none">
+        <div style="margin-bottom:12px"><b style="display:block;margin-bottom:6px">☀️ সকাল</b><div class="pqo-row"><input type="number" id="adm-qty-b" class="qty-input" value="1" min="1"><button class="pqo-btn" id="adm-b-P" onclick="setAdmPQO('b','P')">P</button><button class="pqo-btn" id="adm-b-Q" onclick="setAdmPQO('b','Q')">Q</button><button class="pqo-btn" id="adm-b-off" onclick="setAdmPQO('b','off')">off</button></div></div>
+        <div style="margin-bottom:12px"><b style="display:block;margin-bottom:6px">🌞 দুপুর</b><div class="pqo-row"><input type="number" id="adm-qty-l" class="qty-input" value="1" min="1"><button class="pqo-btn" id="adm-l-P" onclick="setAdmPQO('l','P')">P</button><button class="pqo-btn" id="adm-l-Q" onclick="setAdmPQO('l','Q')">Q</button><button class="pqo-btn" id="adm-l-off" onclick="setAdmPQO('l','off')">off</button></div></div>
+        <div style="margin-bottom:12px"><b style="display:block;margin-bottom:6px">🌙 রাত</b><div class="pqo-row"><input type="number" id="adm-qty-d" class="qty-input" value="1" min="1"><button class="pqo-btn" id="adm-d-P" onclick="setAdmPQO('d','P')">P</button><button class="pqo-btn" id="adm-d-Q" onclick="setAdmPQO('d','Q')">Q</button><button class="pqo-btn" id="adm-d-off" onclick="setAdmPQO('d','off')">off</button></div></div>
+        <button class="btn btn-primary" onclick="saveAdmMeal()">✅ সেভ করুন</button>
+      </div>
+    </div>
+
+    <!-- Edit Member -->
+    <div class="card" id="card-edit-mem" style="display:none">
+      <div class="sec-title">✏️ সদস্যের তথ্য সম্পাদনা</div>
+      <div class="form-group"><label class="form-label">সদস্য নির্বাচন</label><select id="edit-mem-sel" class="form-input" onchange="loadEditMem()"><option value="">-- নির্বাচন --</option></select></div>
+      <div id="edit-mem-form" style="display:none">
+        <div class="edit-row">
+          <div><label class="form-label">নাম</label><input type="text" id="edit-mem-name" class="form-input"></div>
+          <div><label class="form-label">রুম</label><input type="text" id="edit-mem-room" class="form-input"></div>
+        </div>
+        <div class="edit-row">
+          <div><label class="form-label">Mobile</label><input type="tel" id="edit-mem-mob" class="form-input"></div>
+          <div><label class="form-label">Job ID</label><input type="text" id="edit-mem-job" class="form-input"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">সদস্যের ধরন</label>
+          <select id="edit-mem-type" class="form-input">
+            <option value="inside">ইনসাইড</option>
+            <option value="outside">আউটসাইড</option>
+            <option value="cook">বাবুর্চি</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">যোগদানের তারিখ</label><div id="edit-mem-joined" style="padding:10px 0;color:var(--text-light);font-size:14px;">—</div></div>
+        <button class="btn btn-primary" onclick="saveEditMem()">✅ সংরক্ষণ করুন</button>
+      </div>
+    </div>
+
+    <!-- Delete Member -->
+    <div class="card" id="card-del-mem" style="display:none">
+      <div class="sec-title">🗑️ সদস্য মুছে ফেলুন</div>
+      <div class="alert alert-danger show">⚠️ এই কাজ পূর্বাবস্থায় ফেরানো যাবে না!</div>
+      <div class="form-group"><label class="form-label">সদস্য নির্বাচন</label><select id="del-mem-sel" class="form-input"><option value="">-- নির্বাচন --</option></select></div>
+      <button class="btn btn-danger" onclick="deleteMember()">🗑️ স্থায়ীভাবে মুছুন</button>
+    </div>
+
+    <!-- Controller Management -->
+    <div class="card" id="card-ctrl" style="display:none">
+      <div class="sec-title">⭐ Controller ব্যবস্থাপনা</div>
+      <div id="ctrl-list" style="margin-bottom:12px"></div>
+      <div class="form-group"><label class="form-label">নতুন Controller যোগ</label><select id="ctrl-add-sel" class="form-input"><option value="">-- সদস্য নির্বাচন --</option></select></div>
+      <button class="btn btn-primary btn-sm" onclick="addController()" style="width:100%;margin-bottom:8px">✅ Controller করুন</button>
+      <div class="form-group"><label class="form-label">Controller বাদ দিন</label><select id="ctrl-rem-sel" class="form-input"><option value="">-- Controller নির্বাচন --</option></select></div>
+      <button class="btn btn-danger btn-sm" onclick="removeController()" style="width:100%">❌ বাদ দিন</button>
+    </div>
+
+    <!-- Site Note Card -->
+    <div class="card" id="card-sitenote" style="display:none">
+      <div class="sec-title">📍 ঠিকানা / সাইট নোট</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Home পেজের শিরোনামের নিচে দেখানো হবে</p>
+      <div class="form-group">
+        <label class="form-label">ঠিকানা বা শর্ট নোট</label>
+        <input type="text" id="site-note-input" class="form-input" placeholder="যেমন: আশুগঞ্জ, ব্রাহ্মণবাড়িয়া" maxlength="80">
+      </div>
+      <button class="btn btn-primary" onclick="saveSiteNote()">✅ সেভ করুন</button>
+    </div>
+
+    <!-- Cycle Delete Card -->
+    <div class="card" id="card-del-cycle" style="display:none">
+      <div class="sec-title">🗓️ মেস মাস চক্র ডিলিট</div>
+      <div class="alert alert-danger show" style="font-size:12px">⚠️ এই কাজ পূর্বাবস্থায় ফেরানো যাবে না! সদস্য তালিকা অক্ষত থাকবে।</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">মেস মাস: ১১ তারিখ থেকে পরের মাসের ১০ তারিখ পর্যন্ত</p>
+      <div class="form-group">
+        <label class="form-label">চক্র নির্বাচন করুন</label>
+        <select id="del-cycle-sel" class="form-input"><option value="">-- চক্র নির্বাচন --</option></select>
+      </div>
+      <div id="del-cycle-preview" style="margin-bottom:12px;font-size:12px;color:var(--text-light);display:none"></div>
+      <button class="btn btn-danger" onclick="deleteMessCycle()">🗑️ এই চক্রের ডেটা মুছুন</button>
+    </div>
+
+    <!-- ── মাস হস্তান্তর CARD ── -->
+    <div class="card" id="card-handover" style="display:none">
+      <div class="sec-title">🔄 মাস হস্তান্তর</div>
+      <div class="alert alert-danger show" style="font-size:12px;margin-bottom:10px">
+        ⚠️ হস্তান্তর পূর্বে সকল রিপোর্ট যাচাই করে নিন।
+      </div>
+      <div class="alert alert-info show" style="font-size:12px;margin-bottom:14px">
+        ℹ️ মাস শেষ হলে এই বাটনে চাপুন।<br>
+        প্রতিটি সদস্যের নেট ব্যালেন্স পরের মাসে <b>পূর্ববর্তী ব্যালেন্স</b> হিসেবে সেট হবে।
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">মাস নির্বাচন করুন</label>
+        <select id="handover-month-sel" class="form-input"></select>
+      </div>
+      <button class="btn btn-accent" style="width:100%" onclick="doMonthHandover()">🔄 মাস হস্তান্তর করুন</button>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1)">
+        <div style="font-size:11px;color:var(--text-light);margin-bottom:8px">⚙️ জরুরি অবস্থা — ভুল হয়ে গেলে ব্যবহার করুন</div>
+        <button class="btn" style="width:100%;background:rgba(229,57,53,.12);border:1px solid #e53935;color:#e53935;font-size:13px" onclick="resetHandoverLock()">🔓 হস্তান্তর লক রিসেট করুন</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ NOTICE BOARD SCREEN ═══════════ -->
+<div id="sc-notice" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">📢 নোটিশ বোর্ড</div>
+    <div class="header-sub">Notice Board</div>
+  </div>
+  <div class="content">
+    <div class="card" id="notice-view-card">
+      <div class="sec-title">📋 বর্তমান নোটিশ</div>
+      <div id="notice-display" style="font-size:15px;line-height:1.8;color:var(--text);white-space:pre-line;min-height:80px;padding:8px 0">
+        <p class="muted tc">কোনো নোটিশ নেই</p>
+      </div>
+    </div>
+    <div class="card" id="notice-edit-card" style="display:none">
+      <div class="sec-title">✏️ নোটিশ সম্পাদনা</div>
+      <div class="form-group">
+        <label class="form-label">নোটিশের বিষয়বস্তু</label>
+        <textarea id="notice-text-input" class="form-input" rows="6" style="resize:vertical;line-height:1.6" placeholder="নোটিশ লিখুন..."></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <label style="font-size:14px;font-weight:600;color:var(--text-light)">পপআপ চালু/বন্ধ:</label>
+        <button id="popup-toggle-btn" onclick="toggleNoticePopup()" style="padding:8px 20px;border-radius:20px;border:2px solid var(--primary);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:var(--bg);color:var(--primary);transition:all .2s">লোড হচ্ছে...</button>
+      </div>
+      <button class="btn btn-primary" onclick="saveNotice()">✅ নোটিশ সেভ করুন</button>
+      <button class="btn btn-danger" style="margin-top:6px" onclick="clearNotice()">🗑️ নোটিশ মুছুন</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ RULES ═══════════ -->
+<div id="sc-rules" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">📋 নিয়মাবলী</div>
+    <div class="header-sub">Mess Rules</div>
+  </div>
+  <div class="content">
+
+    <!-- Meal Config -->
+    <div id="rules-cfg-insider">
+      <div class="card" style="padding:12px 14px 14px">
+        <div style="font-size:13px;font-weight:700;color:var(--text-light);margin-bottom:10px;letter-spacing:.3px">মিল মান কনফিগারেশন</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <button onclick="togRulesCfg('insider')" style="background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 8px;cursor:pointer;text-align:center;color:var(--text);font-family:inherit">
+            <div style="font-size:14px;font-weight:700;color:var(--primary)">কোয়ার্টার</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:3px">Insider</div>
+          </button>
+          <button onclick="togRulesCfg('outsider')" style="background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 8px;cursor:pointer;text-align:center;color:var(--text);font-family:inherit">
+            <div style="font-size:14px;font-weight:700;color:var(--primary)">বাইরে থাকেন</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:3px">Outside</div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shortfall Meal Entry -->
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:10px">📉 Shortfall Meal Entry</div>
+
+      <!-- Search box -->
+      <div style="position:relative;margin-bottom:10px">
+        <input type="text" id="sf-search" class="form-input" placeholder="🔍 Job ID লিখুন..." autocomplete="off"
+          oninput="sfSearch()" onfocus="sfSearch()" onblur="setTimeout(()=>{const d=document.getElementById('sf-dropdown');if(d)d.style.display='none';},180)">
+        <div id="sf-dropdown" style="display:none;position:absolute;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.15);z-index:50;max-height:220px;overflow-y:auto;margin-top:2px"></div>
+      </div>
+
+      <!-- Selected member info + input + save -->
+      <div id="sf-selected" style="display:none">
+        <div id="sf-mem-info" style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+          <div id="sf-mem-avatar" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-light));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex-shrink:0"></div>
+          <div style="flex:1">
+            <div id="sf-mem-name" style="font-size:14px;font-weight:700;color:var(--text)"></div>
+            <div id="sf-mem-sub" style="font-size:11px;color:var(--text-light)"></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:10px;color:var(--text-light)">Net Meals</div>
+            <div id="sf-mem-meals" style="font-size:16px;font-weight:700;color:var(--primary)"></div>
+          </div>
+        </div>
+        <!-- Compact: input + save inline -->
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="sf-amount" class="form-input" step="0.25" min="0" placeholder="Shortfall মিলের সংখ্যা লিখুন..." style="flex:1;margin:0">
+          <button onclick="saveShortfall()" style="background:var(--primary);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;font-family:inherit">✅ সেভ</button>
+        </div>
+        <div id="sf-current-note" style="font-size:11px;color:var(--text-light);margin-top:6px"></div>
+      </div>
+    </div>
+
+    <!-- Hidden popup cards -->
+    <div id="card-cfg-insider" style="display:none">
+      <div class="sec-title">কোয়ার্টার সদস্য — মিল মান</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">তারিখ খালি রাখলে সব দিনের জন্য ডিফল্ট মান হিসেবে সেট হবে</p>
+      <div class="form-group"><label class="form-label">তারিখ (ঐচ্ছিক)</label><input type="date" id="cfg-date-insider" class="form-input"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div><label class="form-label">সকাল</label><input type="number" step="0.25" min="0" id="cfg-bv-insider" class="form-input" value="0.75"></div>
+        <div><label class="form-label">দুপুর</label><input type="number" step="0.25" min="0" id="cfg-lv-insider" class="form-input" value="1.5"></div>
+        <div><label class="form-label">রাত</label><input type="number" step="0.25" min="0" id="cfg-dv-insider" class="form-input" value="0.75"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveCfg('insider')">✅ সেভ করুন</button>
+    </div>
+
+    <div id="card-cfg-outsider" style="display:none">
+      <div class="sec-title">বাইরে থাকেন — মিল মান</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:14px">তারিখ খালি রাখলে সব দিনের জন্য ডিফল্ট মান হিসেবে সেট হবে</p>
+      <div class="form-group"><label class="form-label">তারিখ (ঐচ্ছিক)</label><input type="date" id="cfg-date-outsider" class="form-input"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div><label class="form-label">সকাল</label><input type="number" step="0.25" min="0" id="cfg-bv-outsider" class="form-input" value="0.75"></div>
+        <div><label class="form-label">দুপুর</label><input type="number" step="0.25" min="0" id="cfg-lv-outsider" class="form-input" value="1.5"></div>
+        <div><label class="form-label">রাত</label><input type="number" step="0.25" min="0" id="cfg-dv-outsider" class="form-input" value="0.75"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveCfg('outsider')">✅ সেভ করুন</button>
+    </div>
+
+  </div>
+</div>
+
+
+<div class="modal-bg notice-modal-center" id="notice-popup-modal">
+  <div class="modal" style="border-radius:20px;max-height:80vh">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="modal-title" style="margin:0">📢 নোটিশ</div>
+      <button onclick="closeNoticePopup()" style="background:var(--danger);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">×</button>
+    </div>
+    <div id="notice-popup-body" class="modal-body" style="margin-bottom:16px;max-height:50vh;overflow-y:auto"></div>
+    <button class="btn btn-primary" onclick="closeNoticePopup()" style="margin-bottom:0">✅ বুঝেছি, বন্ধ করুন</button>
+  </div>
+</div>
+
+<!-- ═══════════ WHO EATS SCREEN ═══════════ -->
+<div id="sc-whoeats" class="screen">
+  <div class="content" style="padding:0">
+
+    <!-- Sticky Header -->
+    <div style="position:sticky;top:0;z-index:100;background:var(--card);border-bottom:1px solid var(--border);padding:6px 14px 0">
+      <!-- Row 1: back | title+date | pdf -->
+      <div style="display:grid;grid-template-columns:36px 1fr 60px;align-items:center;gap:4px;margin-bottom:4px">
+        <button onclick="goHome()" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:22px;padding:0;line-height:1;text-align:left">‹</button>
+        <div style="text-align:center;line-height:1.2">
+          <div id="we-slot-lbl" style="font-size:20px;font-weight:800;color:var(--text);letter-spacing:.5px"></div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:1px">
+            <span id="we-date-lbl" style="font-weight:600"></span>
+            <span id="we-day-lbl" style="margin-left:5px"></span>
+          </div>
+        </div>
+        <button id="we-pdf-btn" onclick="exportWhoEatsPDF()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:5px 0;font-size:11px;font-weight:700;cursor:pointer;width:100%">PDF</button>
+      </div>
+      <!-- Toggle: Plant / Quarter -->
+      <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin:0 -14px;padding:0 14px">
+        <button id="we-tog-p" onclick="setWeView('P')" style="flex:1;background:none;border:none;border-bottom:3px solid var(--primary);padding:6px 4px;font-size:13px;font-weight:700;cursor:pointer;color:var(--primary);transition:all .18s">প্ল্যান্ট</button>
+        <button id="we-tog-q" onclick="setWeView('Q')" style="flex:1;background:none;border:none;border-bottom:3px solid transparent;padding:6px 4px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-light);transition:all .18s">কোয়ার্টার</button>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:12px 14px 80px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span id="we-view-lbl" style="font-size:11px;font-weight:700;letter-spacing:.4px"></span>
+        <span id="we-view-total" style="font-size:13px;font-weight:800;color:var(--primary)"></span>
+      </div>
+      <div id="we-view-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px"></div>
+      <div id="we-empty" style="display:none;text-align:center;padding:50px 0;color:var(--text-light);font-size:13px">এই বেলায় কেউ নেই</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ MEAL HISTORY SCREEN ═══════════ -->
+<div id="sc-mealhistory" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title" id="meal-hist-cycle-label">মিল হিসাব</div>
+  </div>
+  <div class="content pb-nav" id="meal-hist-body">
+    <p style="padding:20px;color:var(--text-light)">লোড হচ্ছে...</p>
+  </div>
+</div>
+
+<!-- ═══════════ ALL MEMBERS BILL MODAL ═══════════ -->
+<!-- ═══════════ মাসিক হিসাব বিবরণী — FULL SCREEN ═══════════ -->
+<div id="sc-mybill" class="screen">
+  <div style="position:sticky;top:0;z-index:20;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border);">
+    <button onclick="goHome()" style="background:var(--primary);color:#fff;border:none;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;letter-spacing:.2px;">← Home</button>
+  </div>
+  <div class="content pb-nav" id="mybill-content" style="padding-top:14px">লোড হচ্ছে...</div>
+</div>
+
+
+<!-- ═══ SPLASH SCREEN ═══ -->
+<div id="fb-loading">
+  <div class="splash-icon-wrap">
+    <img src="icon-512.png" alt="Midland Quarter" class="splash-icon">
+  </div>
+  <div class="splash-title">মেস ম্যানেজমেন্ট সিস্টেম</div>
+  <div class="mq-load-sub"></div>
+  <div class="splash-dots">
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+  </div>
+</div>
+
+<!-- ═══════════ CONFIRM MODAL ═══════════ -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">নিশ্চিত করুন</div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal()" style="margin-bottom:0">না</button>
+      <button class="btn btn-primary" id="modal-ok" style="margin-bottom:0">হ্যাঁ</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// config.js + utils.js + db.js → moved to external files
+
+// SCREEN NAV / DARK MODE / MODAL → moved to js/ui.js
+
+// SAVE ID → moved to js/auth.js
+
+// AUTH functions → moved to js/auth.js
+
+// HOME + WHO EATS → moved to js/home.js
+
+// MEAL → moved to js/meal.js
+
+
+// OTHERS EXPENSE → moved to js/others.js
+
+
+// ═══════════════════════════════════════════════
+// BILL / MEAL RATE & HISTORY — moved to js/bill.js
+// Extracted: 2026-05-20 | Original lines: 2066–2113
+// Functions: loadBill()
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// REPORT — moved to js/report.js
+// Extracted: 2026-05-20 | Original lines: 2114–2179
+// Functions: loadReport(), _doLoadReport()
+// ═══════════════════════════════════════════════
+// finalizeMealRate removed — meal rate is now fully automatic (total_expense / total_meals)
+
+// ═══════════════════════════════════════════════
+// MEMBERS + PROFILE — moved to js/members.js
+// Extracted: 2026-05-19 | Original lines: 2178–2472
+// ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════
+// ADMIN + HANDOVER + PDF + BILL SCREEN + NOTICE BOARD — moved to js/admin.js
+// Extracted: 2026-05-19 | Original lines: 2186–3359
+// ═══════════════════════════════════════════════
+
+// V(), isAdmin(), fmtDateBN(), toast() → moved to js/helpers.js
+
+
+// ═══════════════════════════════════════════════
+// INIT — no loading delay
+// ═══════════════════════════════════════════════
+
+// loadDB() — splash চলার সময়ই auth observer-এর পরে call হয়েছে (parallel loading)
+
+// OFFICE MEAL → moved to js/office-meal.js
+</script>
+<script src="js/bazar.js"></script>
+<script src="js/meal.js"></script>
+<script src="js/office-meal.js"></script>
+<script src="js/home.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/notice.js"></script>
+<script src="js/others.js"></script>
+<script src="js/members.js"></script>
+<script src="js/report.js"></script>
+<script src="js/bill.js"></script>
+<script src="js/deposit.js"></script>
+<script src="js/helpers.js"></script>
+<script>
+// ── Bootstrap ──
+// Firebase Auth ready হওয়ার পরে loadDB() call হবে
+// onAuthStateChanged → logged in → loadDB() → DB listeners start
+firebase.auth().onAuthStateChanged(function(user){
+  if(user){ loadDB(); }
+});
+
+// ── Init Save ID on page load ──
+document.addEventListener('DOMContentLoaded', initSaveId);
+
+// ── PWA Service Worker Registration ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => {
+        console.log('SW registered:', reg.scope);
+        // ✅ প্রতিবার app লোডে update চেক করো
+        reg.update();
+
+        // ✅ নতুন SW install হলে auto-reload
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // নতুন version ready — reload করো
+              toast('🔄 নতুন আপডেট পাওয়া গেছে! লোড হচ্ছে...');
+              setTimeout(() => window.location.reload(true), 1800);
+            }
+          });
+        });
+      })
+      .catch(err => console.log('SW error:', err));
+
+    // SW-থেকে message পেলে reload করো (skipWaiting signal)
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data && e.data.type === 'SW_UPDATED') {
+        window.location.reload(true);
+      }
+    });
+  });
+}
+
+// ── PWA Install Prompt ──
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Install button দেখাও
+  const btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'none';
+  toast('✅ App সফলভাবে Install হয়েছে!');
+});
+
+function triggerPWAInstall() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(r => {
+      deferredPrompt = null;
+    });
+  }
+}
+</script>
+
+<!-- ═══════════ PRINT / REPORT OVERLAY ═══════════ -->
+<div id="print-overlay" style="display:none;position:fixed;inset:0;z-index:3000;background:#f4f7f5;overflow-y:auto;">
+  <div id="print-overlay-toolbar" style="position:sticky;top:0;z-index:10;background:#1a6b3c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;box-shadow:0 2px 10px rgba(0,0,0,.3);">
+    <button onclick="closePrintOverlay()" style="background:rgba(255,255,255,.18);border:none;color:#fff;padding:7px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">✕ বন্ধ করুন</button>
+    <div id="print-overlay-title" style="font-size:14px;font-weight:700;">📊 রিপোর্ট</div>
+    <button onclick="
+      const _t=document.title;
+      const k=document.getElementById('rpt-month')?.value||'';
+      const EN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const [y,mo]=k.split('-').map(Number);
+      if(y&&mo){ const nm=mo%12,ny=mo===12?y+1:y; document.title=EN[mo-1]+' 11 to '+EN[nm]+' 10, '+ny; }
+      window.print();
+      setTimeout(()=>{document.title=_t;},1000);
+    " style="background:#fff;color:#1a6b3c;border:none;padding:7px 16px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">🖨️ Print / PDF</button>
+  </div>
+  <div id="print-overlay-content" style="padding:12px;max-width:900px;margin:0 auto;"></div>
+</div>
+
+</body>
+</html>
+
