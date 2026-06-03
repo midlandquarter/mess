@@ -55,10 +55,27 @@ auth.onAuthStateChanged(fbUser=>{
   firebase.database().ref('users/' + uid).once('value').then(snap=>{
     const userData = snap.val();
     if(!userData){
-      hideSplash();
-      auth.signOut(); CU=null; localStorage.removeItem('mq_authed'); showSc('login');
-      const al = document.getElementById('login-alert');
-      if(al){ al.textContent='❌ প্রোফাইল পাওয়া যায়নি। Admin-এর সাথে যোগাযোগ করুন।'; al.className='alert alert-danger show'; }
+      // ✅ pendingApprovals চেক — pending/rejected user এখানেই থামবে
+      firebase.database().ref('pendingApprovals/'+uid).once('value').then(pendSnap=>{
+        hideSplash();
+        auth.signOut(); CU=null; localStorage.removeItem('mq_authed'); showSc('login');
+        const al=document.getElementById('login-alert');
+        if(!al) return;
+        const pend=pendSnap.val();
+        if(pend && pend.status==='pending'){
+          al.innerHTML='⏳ <b>আপনার একাউন্ট পর্যালোচনা করা হচ্ছে।</b><br>মেস পরিচালকের সাথে যোগাযোগ করুন। Approval/অনুমোদন নিন।';
+          al.className='alert alert-warning show';
+        } else if(pend && pend.status==='rejected'){
+          al.innerHTML='❌ আপনার আবেদন প্রত্যাখ্যান করা হয়েছে।<br><small>মেস পরিচালকের সাথে যোগাযোগ করুন।</small>';
+          al.className='alert alert-danger show';
+        } else {
+          al.textContent='❌ প্রোফাইল পাওয়া যায়নি। Admin-এর সাথে যোগাযোগ করুন।';
+          al.className='alert alert-danger show';
+        }
+      }).catch(()=>{
+        hideSplash();
+        auth.signOut(); CU=null; localStorage.removeItem('mq_authed'); showSc('login');
+      });
       return;
     }
     if(userData.blocked){
@@ -266,7 +283,30 @@ function doLogin(){
     const userRef = firebase.database().ref('users/' + uid);
     userRef.once('value').then(snap=>{
       const userData = snap.val();
-      if(!userData){ al.textContent='❌ RTDB-তে আপনার প্রোফাইল পাওয়া যায়নি। Admin এর সাথে যোগাযোগ করুন।'; al.className='alert alert-danger show'; auth.signOut(); if(btn){ btn.disabled=false; btn.textContent='Login করুন'; } return; }
+      if(!userData){
+        // ✅ pendingApprovals চেক — pending/rejected user-কে সঠিক বার্তা দাও
+        firebase.database().ref('pendingApprovals/'+uid).once('value').then(pendSnap=>{
+          const pend=pendSnap.val();
+          auth.signOut();
+          if(pend && pend.status==='pending'){
+            al.innerHTML='⏳ <b>আপনার একাউন্ট পর্যালোচনা করা হচ্ছে।</b><br>মেস পরিচালকের সাথে যোগাযোগ করুন। Approval/অনুমোদন নিন।';
+            al.className='alert alert-warning show';
+          } else if(pend && pend.status==='rejected'){
+            al.innerHTML='❌ আপনার আবেদন প্রত্যাখ্যান করা হয়েছে।<br><small>মেস পরিচালকের সাথে যোগাযোগ করুন।</small>';
+            al.className='alert alert-danger show';
+          } else {
+            al.textContent='❌ RTDB-তে আপনার প্রোফাইল পাওয়া যায়নি। Admin এর সাথে যোগাযোগ করুন।';
+            al.className='alert alert-danger show';
+          }
+          if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
+        }).catch(()=>{
+          auth.signOut();
+          al.textContent='❌ প্রোফাইল পাওয়া যায়নি। Admin এর সাথে যোগাযোগ করুন।';
+          al.className='alert alert-danger show';
+          if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
+        });
+        return;
+      }
       if(userData.blocked){ al.textContent='❌ আপনার অ্যাকাউন্ট ব্লক করা হয়েছে। Manager এর সাথে যোগাযোগ করুন।'; al.className='alert alert-danger show'; auth.signOut(); if(btn){ btn.disabled=false; btn.textContent='Login করুন'; } return; }
       // Load role from roles/{uid} and sanitize (remove any accidental extra quotes)
       firebase.database().ref('roles/'+uid).once('value').then(rsnap=>{
@@ -442,24 +482,16 @@ function doRegister(){
       if(!user){ throw new Error('auth/no-current-user'); }
       await user.sendEmailVerification();
 
-      // Step 3 — Now persist the profile data to Realtime Database
-      const userData = { name, mobile: mob, jobId: job, u: uname, room, type, role: 'member', createdAt: tod() };
-      await firebase.database().ref('users/' + uid).set(userData);
-      await firebase.database().ref('roles/' + uid).set({ role: 'member' });
+      // Step 3 — pendingApprovals-এ save করো। Approved হওয়ার আগে DB-তে যাবে না।
+      // Controller অনুমোদন দিলে তখন users/{uid}, roles/{uid}, DB.users-এ যোগ হবে।
+      const pendingData = {
+        name, mobile: mob, jobId: job, u: uname, room, type,
+        email, requestedAt: tod(), status: 'pending'
+      };
+      await firebase.database().ref('pendingApprovals/' + uid).set(pendingData);
 
-      // Step 4 — Mirror into local DB cache AND write directly to messData
-      if(!DB.users) DB.users=[];
-      const newUser = { uid, u: uname, name, mob, email, job, room, type, role:'member', joined: tod(), emailVerified: false, activeFrom: messMonthKey() };
-      // Duplicate check — একই user দুবার যেন না ঢোকে
-      if(!DB.users.find(x=>x.u===newUser.u)){
-        DB.users.push(newUser);
-        saveUsers();
-      } else {
-        console.warn('[auth] User already in DB.users, skipping push:', newUser.u);
-      }
-
-      // Step 5 — Show success, then sign out cleanly
-      ok.textContent='✅ রেজিস্ট্রেশন সফল! আপনার Email চেক করুন — Verification লিংক পাঠানো হয়েছে।';
+      // Step 4 — Show success with approval note
+      ok.innerHTML='✅ রেজিস্ট্রেশন সফল! আপনার Email চেক করুন।<br><small style="opacity:.85">Email যাচাইয়ের পর মেস পরিচালকের অনুমোদনের অপেক্ষা করুন।</small>';
       ok.className='alert alert-success show';
       al.className='alert';
       if(btn){ btn.disabled=false; btn.textContent='Register করুন'; }

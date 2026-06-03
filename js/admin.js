@@ -41,6 +41,14 @@ function initAdmin(){
   document.querySelectorAll('.ctrl-only').forEach(el=>{ el.style.display=ctrl?'flex':'none'; });
   const sub=document.getElementById('admin-panel-sub');
   if(sub) sub.textContent=ctrl?'পরিচালনা কেন্দ্র (Controller)':'পরিচালনা কেন্দ্র (Manager)';
+  // Controller হলে pending approval badge আপডেট করো
+  if(ctrl){
+    firebase.database().ref('pendingApprovals').once('value').then(snap=>{
+      const data=snap.val()||{};
+      const cnt=Object.values(data).filter(v=>v&&v.status==='pending').length;
+      _updateApprovalBadge(cnt);
+    }).catch(()=>{});
+  }
 
   const sortedForSel=[...DB.users].sort((a,b)=>{
     const ai=parseInt(a.job)||Infinity, bi=parseInt(b.job)||Infinity;
@@ -1158,6 +1166,76 @@ function saveSiteNote(){
 function initSiteNoteCard(){
   const el=document.getElementById('site-note-input');
   if(el) el.value=DB.siteNote||'';
+}
+
+// ═══════════════════════════════════════════════
+// MEMBER APPROVAL PANEL (Controller only)
+// ═══════════════════════════════════════════════
+function initApprovalPanel(){
+  if(!isController()){ toast('❌ শুধুমাত্র Controller এক্সেস করতে পারবেন!'); return; }
+  const list=document.getElementById('approval-list');
+  if(!list) return;
+  list.innerHTML='<div style="text-align:center;padding:16px;opacity:.6">⏳ লোড হচ্ছে...</div>';
+  firebase.database().ref('pendingApprovals').once('value').then(snap=>{
+    const data=snap.val();
+    const pending=data ? Object.entries(data).filter(([,v])=>v&&v.status==='pending') : [];
+    _updateApprovalBadge(pending.length);
+    if(!pending.length){
+      list.innerHTML='<div style="text-align:center;padding:16px;opacity:.6">✅ কোনো অপেক্ষমাণ আবেদন নেই।</div>';
+      return;
+    }
+    list.innerHTML=pending.map(([uid,p])=>`
+      <div class="approval-item" id="apv-${esc(uid)}">
+        <div class="apv-info">
+          <div class="apv-name">${esc(p.name)}</div>
+          <div class="apv-meta">📱 ${esc(p.mobile||'-')} &nbsp;|&nbsp; 🪪 ID: ${esc(p.jobId||'-')}</div>
+          <div class="apv-meta">🏠 ${esc(p.room||'-')} &nbsp;|&nbsp; 📅 ${esc(p.requestedAt||'-')}</div>
+        </div>
+        <div class="apv-btns">
+          <button class="btn btn-success btn-sm" onclick="doApproveUser('${esc(uid)}')">✅ Approve</button>
+          <button class="btn btn-danger btn-sm" onclick="doRejectUser('${esc(uid)}')">❌ Reject</button>
+        </div>
+      </div>`).join('');
+  }).catch(()=>{ if(list) list.innerHTML='<div style="color:var(--danger);padding:12px">❌ লোড ব্যর্থ। ইন্টারনেট চেক করুন।</div>'; });
+}
+function _updateApprovalBadge(cnt){
+  const b=document.getElementById('approval-badge');
+  if(!b) return;
+  b.textContent=cnt||''; b.style.display=cnt?'inline-flex':'none';
+}
+function doApproveUser(uid){
+  if(!isController()){ toast('❌ শুধুমাত্র Controller পারবেন!'); return; }
+  showModal('সদস্য অনুমোদন','এই সদস্যকে মেসে যোগ দেওয়ার অনুমতি দেবেন?',()=>{
+    firebase.database().ref('pendingApprovals/'+uid).once('value').then(snap=>{
+      const p=snap.val();
+      if(!p){ toast('❌ আবেদন পাওয়া যায়নি!'); return; }
+      if(DB.users.find(x=>x.u===p.u||x.u===('u_'+(p.mobile||'')))){
+        toast('❌ এই মোবাইল নম্বরে ইতিমধ্যে সদস্য আছে!');
+        firebase.database().ref('pendingApprovals/'+uid).remove();
+        initApprovalPanel(); return;
+      }
+      return approvePendingUser(uid, p);
+    }).then(()=>{
+      toast('✅ সদস্য অনুমোদিত হয়েছে!');
+      const el=document.getElementById('apv-'+uid); if(el) el.remove();
+      const rem=document.querySelectorAll('[id^="apv-"]').length;
+      _updateApprovalBadge(rem);
+      if(!rem){ const l=document.getElementById('approval-list'); if(l) l.innerHTML='<div style="text-align:center;padding:16px;opacity:.6">✅ কোনো অপেক্ষমাণ আবেদন নেই।</div>'; }
+      initAdmin(); // dropdown list আপডেট
+    }).catch(e=>{ console.error(e); toast('❌ অনুমোদনে সমস্যা!'); });
+  });
+}
+function doRejectUser(uid){
+  if(!isController()){ toast('❌ শুধুমাত্র Controller পারবেন!'); return; }
+  showModal('আবেদন প্রত্যাখ্যান','এই সদস্যের আবেদন প্রত্যাখ্যান করবেন?',()=>{
+    rejectPendingUser(uid).then(()=>{
+      toast('✅ আবেদন প্রত্যাখ্যান করা হয়েছে।');
+      const el=document.getElementById('apv-'+uid); if(el) el.remove();
+      const rem=document.querySelectorAll('[id^="apv-"]').length;
+      _updateApprovalBadge(rem);
+      if(!rem){ const l=document.getElementById('approval-list'); if(l) l.innerHTML='<div style="text-align:center;padding:16px;opacity:.6">✅ কোনো অপেক্ষমাণ আবেদন নেই।</div>'; }
+    }).catch(()=>toast('❌ প্রত্যাখ্যানে সমস্যা!'));
+  });
 }
 
 // ═══════════════════════════════════════════════

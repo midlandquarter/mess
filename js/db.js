@@ -221,6 +221,29 @@ function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMo
 function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
 function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
 
+// ── Pending Approval helpers ────────────────────────────────────────────────
+// Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
+function approvePendingUser(uid, p){
+  if(!uid||!p) return Promise.reject('invalid');
+  const uObj={name:p.name, mobile:p.mobile, jobId:p.jobId||'', u:p.u||('u_'+p.mobile),
+    room:p.room||'', type:p.type||'inside', role:'member', createdAt:tod()};
+  return firebase.database().ref('users/'+uid).set(uObj)
+    .then(()=>firebase.database().ref('roles/'+uid).set({role:'member'}))
+    .then(()=>{
+      if(!DB.users) DB.users=[];
+      const newU={uid, u:uObj.u, name:uObj.name, mob:uObj.mobile, email:p.email||'',
+        job:uObj.jobId, room:uObj.room, type:uObj.type, role:'member',
+        joined:tod(), activeFrom:messMonthKey()};
+      if(!DB.users.find(x=>x.u===newU.u)){ DB.users.push(newU); saveGlobal(); saveUsers(); }
+      return firebase.database().ref('pendingApprovals/'+uid).remove();
+    });
+}
+// Reject: status=rejected লেখো
+function rejectPendingUser(uid){
+  if(!uid) return Promise.reject('invalid');
+  return firebase.database().ref('pendingApprovals/'+uid+'/status').set('rejected');
+}
+
 // ── saveDB() — সব পুরানো call-এর জন্য backward compatible ──
 function saveDB(){
   if(!_dbLoaded){ console.warn('saveDB blocked: DB not yet loaded'); return; }
