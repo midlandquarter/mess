@@ -901,6 +901,7 @@ try{
   <div class="content">
     <div class="card">
       <div class="sec-title">⚙️ Admin কার্যক্রম</div>
+      <div class="adm-item ctrl-only" onclick="tog('card-approval');initApprovalPanel()"><div class="adm-icon">🔔</div><div><div class="adm-lbl">সদস্য অনুমোদন <span id="approval-badge" style="display:none;background:var(--danger);color:#fff;border-radius:50%;padding:1px 7px;font-size:12px;font-weight:700;margin-left:4px;vertical-align:middle"></span></div><div class="adm-sub">নতুন রেজিস্ট্রেশন অনুমোদন / প্রত্যাখ্যান করুন</div></div></div>
       <div class="adm-item ctrl-only" onclick="tog('card-mgr')"><div class="adm-icon">👑</div><div><div class="adm-lbl">ম্যানেজার নিয়োগ</div><div class="adm-sub">প্রতি মাসের ম্যানেজার সেট করুন (সর্বোচ্চ ১০ জন)</div></div></div>
       <div class="adm-item" onclick="tog('card-adm-meal')"><div class="adm-icon">🔓</div><div><div class="adm-lbl">যেকোনো সদস্যের মিল এডিট</div><div class="adm-sub">যেকোনো তারিখ — Lock নেই</div></div></div>
       <div class="adm-item ctrl-only" onclick="tog('card-edit-mem')"><div class="adm-icon">✏️</div><div><div class="adm-lbl">সদস্যের তথ্য সম্পাদনা</div><div class="adm-sub">নাম, রুম, ফোন, ধরন পরিবর্তন</div></div></div>
@@ -913,6 +914,12 @@ try{
     </div>
 
     <!-- Manager Card -->
+    <!-- Approval Card (ctrl-only) -->
+    <div class="card" id="card-approval" style="display:none">
+      <div class="sec-title">🔔 সদস্য অনুমোদন</div>
+      <div id="approval-list"><div style="text-align:center;padding:16px;opacity:.6">⏳ লোড হচ্ছে...</div></div>
+    </div>
+
     <div class="card" id="card-mgr" style="display:none">
       <div class="sec-title">👑 ম্যানেজার নিয়োগ</div>
       <div class="form-group"><label class="form-label">মেস মাস</label><select id="mgr-month" class="form-input"></select></div>
