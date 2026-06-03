@@ -223,6 +223,7 @@ function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonth
 
 // ── Pending Approval helpers ────────────────────────────────────────────────
 // Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
+// ✅ Firebase transaction ব্যবহার করো — rapid approval-এ data হারায় না
 function approvePendingUser(uid, p){
   if(!uid||!p) return Promise.reject('invalid');
   const uObj={name:p.name, mobile:p.mobile, jobId:p.jobId||'', u:p.u||('u_'+p.mobile),
@@ -230,11 +231,23 @@ function approvePendingUser(uid, p){
   return firebase.database().ref('users/'+uid).set(uObj)
     .then(()=>firebase.database().ref('roles/'+uid).set({role:'member'}))
     .then(()=>{
-      if(!DB.users) DB.users=[];
-      const newU={uid, u:uObj.u, name:uObj.name, mob:uObj.mobile, email:p.email||'',
-        job:uObj.jobId, room:uObj.room, type:uObj.type, role:'member',
-        joined:tod(), activeFrom:messMonthKey()};
-      if(!DB.users.find(x=>x.u===newU.u)){ DB.users.push(newU); saveGlobal(); saveUsers(); }
+      // ✅ transaction: current Firebase array পড়ে, নতুন user যোগ করে, atomic write করে।
+      // debounced saveUsers() ব্যবহার করলে rapid approval-এ race condition হয়।
+      return globalRef.child('users').transaction(current=>{
+        if(!Array.isArray(current)) current=[];
+        const newU={uid, u:uObj.u, name:uObj.name, mob:uObj.mobile,
+          email:p.email||'', job:uObj.jobId, room:uObj.room, type:uObj.type,
+          role:'member', joined:tod(), activeFrom:messMonthKey()};
+        if(!current.find(x=>x.u===newU.u)) current.push(newU);
+        return current;
+      });
+    })
+    .then(result=>{
+      // transaction সফল হলে local DB.users-ও sync করো
+      if(result.committed && Array.isArray(result.snapshot.val())){
+        DB.users=result.snapshot.val();
+        if(_minUserCount<DB.users.length) _minUserCount=DB.users.length;
+      }
       return firebase.database().ref('pendingApprovals/'+uid).remove();
     });
 }
