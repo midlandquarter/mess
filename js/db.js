@@ -189,6 +189,31 @@ function saveUsers(){
   globalRef.child('users').set(DB.users).catch(e=>{ console.error('Users save error:',e); toast('⚠️ সদস্য সেভে সমস্যা!'); });
 }
 
+// ── deleteMemberFromDB: members.js-এর deleteMember()-এ call করো ─────────────
+// DB.users filter করার পরে, saveUsers()-এর আগে এই function call করো।
+//
+// কাজ তিনটা:
+//   ① _minUserCount decrement — না করলে (N-1 < N) হয় → saveUsers() BLOCKED
+//   ② users/{uid} + roles/{uid} RTDB node মুছো
+//      → refresh করলেও onAuthStateChanged সাথে সাথে বাউন্স করে ফেলবে
+//   ③ pendingApprovals/{uid} orphan cleanup
+//
+// Usage:
+//   deleteMemberFromDB(targetUid).then(()=>{ saveUsers(); toast('✅ সদস্য মুছে ফেলা হয়েছে'); });
+function deleteMemberFromDB(uid){
+  if(!uid||!_dbLoaded) return Promise.resolve();
+  // ① saveUsers() guard: delete-এর পরে length কমে → guard-কে আগেই জানাও
+  if(_minUserCount>0) _minUserCount--;
+  // ② RTDB node cleanup — এগুলো থাকলে refresh-এ onAuthStateChanged পাস করে
+  return Promise.all([
+    firebase.database().ref('users/'+uid).remove()
+      .catch(e=>console.warn('[deleteMember] users/'+uid+' remove failed:',e)),
+    firebase.database().ref('roles/'+uid).remove()
+      .catch(e=>console.warn('[deleteMember] roles/'+uid+' remove failed:',e)),
+    firebase.database().ref('pendingApprovals/'+uid).remove().catch(()=>{})
+  ]);
+}
+
 // ── Month save: meals, bazar, others, transactions, managers, mealRates, officeMealRates, officeMealNotes, cookBills ──
 let _monthSaveTimer = null;
 // ── array নিশ্চিত করো — Firebase object হলে convert করো ──
@@ -585,6 +610,23 @@ function loadDB(){
         if(Array.isArray(data.users)){
           const _u=new Set(data.users.filter(u=>u&&u.u).map(u=>u.u)).size;
           if(_u>_minUserCount) _minUserCount=_u;
+        }
+        // ── Real-time kick: global/users থেকে সদস্য মুছে দেওয়া হলে
+        // যে browser-এ সে লগইন আছে সেখানেও সাথে সাথে logout হয়ে যাবে।
+        // _dbLoaded guard: initial load-এ false → false kick নেই।
+        // CU guard: login-এর আগে null → false kick নেই।
+        if(_dbLoaded && CU && Array.isArray(DB.users)){
+          if(!DB.users.some(x=>x.uid===CU.uid||x.u===CU.u)){
+            console.warn('[kick] CU no longer in global/users — forcing logout. uid=',CU.uid);
+            auth.signOut().catch(()=>{});
+            CU=null; localStorage.removeItem('mq_authed');
+            try{ showSc('login'); }catch(e){}
+            try{
+              const _kal=document.getElementById('login-alert');
+              if(_kal){ _kal.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।'; _kal.className='alert alert-danger show'; }
+            }catch(e){}
+            return; // এই listener call-এ আর কিছু করার নেই
+          }
         }
         _supplementGlobalFields();
       } else {

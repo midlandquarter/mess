@@ -131,17 +131,28 @@ auth.onAuthStateChanged(fbUser=>{
       _waitUntilReady(()=>{
         // ✅ DB load হওয়ার পর CU সঠিকভাবে sync করো
         const syncIdx = DB.users.findIndex(x=>x.uid===uid||x.u===CU.u);
-        if(syncIdx>=0){
-          DB.users[syncIdx].uid           = uid;
-          DB.users[syncIdx].role          = role;
-          DB.users[syncIdx].emailVerified = true;
-          CU.name       = DB.users[syncIdx].name        || CU.name;
-          CU.mob        = DB.users[syncIdx].mob         || CU.mob;
-          CU.room       = DB.users[syncIdx].room        || CU.room;
-          CU.job        = DB.users[syncIdx].job         || CU.job;
-          CU.prevBalance= DB.users[syncIdx].prevBalance !== undefined ? DB.users[syncIdx].prevBalance : 0;
-          CU.type       = DB.users[syncIdx].type        || CU.type;
+        // ── Deleted user guard ──────────────────────────────────────────────
+        // global/users-এ নেই মানে deleteMember() করা হয়েছে।
+        // users/{uid} RTDB-এ এখনো থাকলেও এখানে ধরা পড়বে।
+        if(syncIdx<0){
+          hideSplash();
+          auth.signOut(); CU=null; localStorage.removeItem('mq_authed');
+          showSc('login');
+          const _kal=document.getElementById('login-alert');
+          if(_kal){ _kal.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।'; _kal.className='alert alert-danger show'; }
+          return;
         }
+        // ✅ FIX: users/{uid} থেকে শুধু auth fields নাও।
+        // name, room, job, mob, balance সবসময় messData/users থেকে রাখো।
+        DB.users[syncIdx].uid           = uid;
+        DB.users[syncIdx].role          = role;
+        DB.users[syncIdx].emailVerified = true;
+        CU.name       = DB.users[syncIdx].name        || CU.name;
+        CU.mob        = DB.users[syncIdx].mob         || CU.mob;
+        CU.room       = DB.users[syncIdx].room        || CU.room;
+        CU.job        = DB.users[syncIdx].job         || CU.job;
+        CU.prevBalance= DB.users[syncIdx].prevBalance !== undefined ? DB.users[syncIdx].prevBalance : 0;
+        CU.type       = DB.users[syncIdx].type        || CU.type;
         hideSplash();
         refreshHome(); showSc('home');
         localStorage.setItem('mq_authed','1'); // returning user flag
@@ -356,13 +367,19 @@ function doLogin(){
         _waitUntilReady(()=>{
           // ✅ DB load হওয়ার পর CU আবার sync
           const si=DB.users.findIndex(x=>x.uid===uid||x.u===CU.u);
-          if(si>=0){
-            DB.users[si].uid=uid; DB.users[si].role=role;
-            CU.prevBalance= DB.users[si].prevBalance !== undefined ? DB.users[si].prevBalance : 0;
-            CU.name = DB.users[si].name || CU.name;
-            CU.room = DB.users[si].room || CU.room;
-            CU.job  = DB.users[si].job  || CU.job;
+          // ── Deleted user guard ─────────────────────────────────────────
+          // global/users-এ নেই → login block করো
+          if(si<0){
+            auth.signOut(); CU=null; localStorage.removeItem('mq_authed');
+            if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
+            al.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।'; al.className='alert alert-danger show';
+            return;
           }
+          DB.users[si].uid=uid; DB.users[si].role=role;
+          CU.prevBalance= DB.users[si].prevBalance !== undefined ? DB.users[si].prevBalance : 0;
+          CU.name = DB.users[si].name || CU.name;
+          CU.room = DB.users[si].room || CU.room;
+          CU.job  = DB.users[si].job  || CU.job;
           refreshHome(); showSc('home');
           setTimeout(()=>showNoticePopup(), 600);
         });
