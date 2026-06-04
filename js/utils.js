@@ -230,3 +230,30 @@ function _withMonthData(mmKey, loadingEl, renderFn, forceRefresh=false){
   });
 }
 
+// ═══════════════════════════════════════════════
+// BENGALI DAY NAME HELPERS
+// বাংলা বার সংক্ষেপ: রবি / সোম / মঙ্গল / বুধ / বৃহঃ / শুক্র / শনি
+// ═══════════════════════════════════════════════
+const BANGLA_DAYS_SHORT = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহঃ', 'শুক্র', 'শনি'];
+
+function getBengaliDayAbbr(dateStr){
+  if(!dateStr) return '';
+  // T12:00:00 দিয়ে timezone edge case এড়ানো হচ্ছে
+  const d = new Date(dateStr + 'T12:00:00');
+  return BANGLA_DAYS_SHORT[d.getDay()] || '';
+}
+
+// date-display-label স্প্যানে বার যোগ করে — যেমন: 04-06-2026(বৃহঃ)
+// inputId: date input এর id (e.g. 'meal-date')
+// labelId: optional custom label id, না দিলে inputId+'-lbl' ধরা হয়
+function appendDayToBNLabel(inputId, labelId){
+  const input = document.getElementById(inputId);
+  const lbl   = document.getElementById(labelId || (inputId + '-lbl'));
+  if(!input || !lbl || !input.value) return;
+  const day = getBengaliDayAbbr(input.value);
+  if(!day) return;
+  // আগের (বার) অংশ সরিয়ে নতুন করে জুড়ি
+  const baseText = lbl.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  lbl.textContent = baseText + '(' + day + ')';
+}
+

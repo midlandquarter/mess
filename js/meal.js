@@ -43,6 +43,7 @@ function initMeal(){
   // ✅ FIX: extendToNext=true — পরের মেস মাসের meal আগাম দেওয়া যাবে
   applyMessCycleBounds('meal-date', null, true);
   updateDateLabel('meal-date');
+  appendDayToBNLabel('meal-date');
   loadMealDate();
 }
 function shiftDate(delta){
@@ -54,6 +55,7 @@ function shiftDate(delta){
   mealDate=newDate;
   document.getElementById('meal-date').value=mealDate;
   updateDateLabel('meal-date');
+  appendDayToBNLabel('meal-date');
   loadMealDate();
 }
 function toISODate(d){ return d.toISOString().split('T')[0]; }
