@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Midland Quarter - মেস ম্যানেজমেন্ট</title>
+<title>Midland Quarter - মেস ম্যানেজমেন্ট সিস্টেম</title>
 <link rel="icon" href="favicon.ico">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f0f1a">
@@ -106,7 +106,7 @@ try{
 
     <!-- Date navigation -->
     <div class="card">
-      <div class="sec-title">📅 তারিখ নির্বাচন</div>
+      <div class="sec-title">📅 তারিখ নির্বাচন করুন</div>
       <div class="date-nav">
         <button class="date-nav-btn" onclick="ofmsShiftDate(-1)">‹</button>
         <input type="date" id="ofms-date" class="form-input" style="flex:1" onchange="ofmsLoadDate()">
@@ -495,7 +495,7 @@ try{
       <div class="sec-title">📅 তারিখ নির্বাচন</div>
       <div class="date-nav">
         <button class="date-nav-btn" onclick="shiftDate(-1)">‹</button>
-        <span class="date-display-wrap" style="flex:1"><input type="date" id="meal-date" class="form-input" style="width:100%" onchange="loadMealDate();updateDateLabel('meal-date')"><span class="date-display-label" id="meal-date-lbl">-- তারিখ --</span></span>
+        <span class="date-display-wrap" style="flex:1"><input type="date" id="meal-date" class="form-input" style="width:100%" onchange="loadMealDate();updateDateLabel('meal-date');appendDayToBNLabel('meal-date')"><span class="date-display-label" id="meal-date-lbl">-- তারিখ --</span></span>
         <button class="date-nav-btn" onclick="shiftDate(1)">›</button>
       </div>
     </div>
