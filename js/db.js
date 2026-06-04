@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════
 
 let _dbLoaded = false; // Guard: Firebase load না হওয়া পর্যন্ত save block
+let _loadDBStarted = false; // Guard: loadDB() একবারের বেশি চলতে দেবো না
 
 // ── Collision-safe ID generator ──────────────────────────────────
 // Date.now() এ একই millisecond-এ দুটো item → same ID → overwrite।
@@ -511,7 +512,16 @@ function _supplementGlobalFields(){
 
 // Real-time listener — দুটো listener: global + current mess month
 function loadDB(){
-  
+  // ── Idempotency guard ─────────────────────────────────────────────────────
+  // index.html-এর bootstrap observer প্রতিটা sign-in event-এ loadDB() call করে।
+  // Guard না থাকলে: login → loadDB() → globalRef listener attached
+  //                registration → new Firebase auth event → loadDB() AGAIN!
+  //                → দ্বিতীয় globalRef listener attached!
+  //                → প্রতিটা Firebase change দুইবার process হয় → race condition
+  // সমাধান: একবার start হলে আর চলবে না।
+  if(_loadDBStarted) return;
+  _loadDBStarted = true;
+  // ──────────────────────────────────────────────────────────────────────────
 
   currentMonthKey = messMonthKey();
   currentMonthRef = monthsRef.child(currentMonthKey);

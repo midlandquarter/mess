@@ -27,8 +27,11 @@
 // Guard flag: prevents onAuthStateChanged from force-signing-out
 // the newly created user before sendEmailVerification() completes.
 let _registrationInProgress = false;
+let _loginInProgress = false; // doLogin() চলাকালীন onAuthStateChanged suppress করো
 
 auth.onAuthStateChanged(fbUser=>{
+  // doLogin() নিজেই সব handle করে — duplicate processing বন্ধ করো
+  if(_loginInProgress) return;
   if(!fbUser){
     // Not logged in
     hideSplash();
@@ -258,6 +261,13 @@ function doLogin(){
   const btn = document.querySelector('#sc-login .btn-primary');
   if(btn){ btn.disabled=true; btn.textContent='লগইন হচ্ছে...'; }
 
+  // ── _loginInProgress: onAuthStateChanged কে suppress করো ──────────
+  // auth.signInWithEmailAndPassword() call হলে onAuthStateChanged fire করে।
+  // তখন doLogin() chain আর onAuthStateChanged — দুটো parallel-এ চলে।
+  // _loginInProgress=true থাকলে onAuthStateChanged skip করে।
+  // doLogin() সব handle করার পর flag clear হয়।
+  _loginInProgress = true;
+
   // Firebase Persistence: LOCAL or SESSION
   const persistence = document.getElementById('remember-me').checked
     ? firebase.auth.Auth.Persistence.LOCAL
@@ -330,18 +340,19 @@ function doLogin(){
             CU.prevBalance= DB.users[idx].prevBalance !== undefined ? DB.users[idx].prevBalance : 0;
             CU.type       = DB.users[idx].type        || CU.type;
           } else {
-            // Duplicate check
-            if(!DB.users.find(x=>x.u===CU.u)){
-              DB.users.push({...CU});
-              saveUsers();
-            } else {
-              console.warn('[auth] User already exists in DB.users:', CU.u);
-            }
+            // ⚠️ DB এখনো সম্পূর্ণ load হয়নি — এখানে push+saveUsers করা বিপজ্জনক।
+            // কারণ: activeFrom ছাড়া entry যাবে এবং পুরো users array overwrite হতে পারে।
+            // সমাধান: _waitUntilReady()-তে sync হবে — সেখানে DB fully loaded থাকবে।
+            console.warn('[auth] User not yet in DB.users at login, will sync in _waitUntilReady:', CU.u);
           }
         }
         // Auto-fix bad role value in RTDB if needed
         if(roleData?.role !== role){ firebase.database().ref('roles/'+uid).set({role}).catch(()=>{}); firebase.database().ref('users/'+uid+'/role').set(role).catch(()=>{}); }
         if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
+        // ── login processing শেষ — এখন flag clear করো ──────────────
+        // _waitUntilReady-এর আগে clear করা হচ্ছে কারণ DB load হতে সময় লাগতে পারে।
+        // এই সময়ের মধ্যে অন্য auth event (token refresh) normal হওয়া দরকার।
+        _loginInProgress = false;
         _waitUntilReady(()=>{
           // ✅ DB load হওয়ার পর CU আবার sync
           const si=DB.users.findIndex(x=>x.uid===uid||x.u===CU.u);
@@ -358,6 +369,7 @@ function doLogin(){
       });
     }).catch(err=>{ al.textContent='❌ ডেটা লোড ব্যর্থ: '+err.message; al.className='alert alert-danger show'; if(btn){ btn.disabled=false; btn.textContent='Login করুন'; } });
   }).catch(err=>{
+    _loginInProgress = false; // error-এও flag reset করো
     let msg = '⚠️ Login failed. Please try again.';
     if(err.code==='auth/user-not-found'||err.code==='auth/wrong-password'||err.code==='auth/invalid-credential')
       msg='✗ Incorrect email or password.';
