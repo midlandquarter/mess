@@ -463,14 +463,40 @@ function doRegister(){
   }
 
   const btn = document.querySelector('#sc-register .btn-primary');
-  if(btn){ btn.disabled=true; btn.textContent='রেজিস্ট্রেশন হচ্ছে...'; }
-
-  // Set guard flag BEFORE creating the user so that onAuthStateChanged
-  // does not race us to signOut() before sendEmailVerification() fires.
-  _registrationInProgress = true;
+  if(btn){ btn.disabled=true; btn.textContent='যাচাই করা হচ্ছে...'; }
 
   (async ()=>{
     try {
+      // ── Step 0: Firebase pendingApprovals-এ duplicate mobile check ──────────
+      // সমস্যা: DB.users শুধু approved সদস্যদের রাখে। Pending সদস্যরা সেখানে নেই।
+      // ফলে উপরের DB.users চেক কখনো pending user-কে ধরতে পারে না।
+      // এর কারণে একই মোবাইল দিয়ে বারবার register করা যায় এবং Firebase Auth-এ
+      // একাধিক duplicate account তৈরি হয়।
+      // সমাধান: Firebase-এ pendingApprovals সরাসরি চেক করো।
+      try {
+        const pendSnap = await firebase.database().ref('pendingApprovals').once('value');
+        const pendData = pendSnap.val() || {};
+        const alreadyPending = Object.values(pendData).some(p =>
+          p && p.mobile === mob && p.status !== 'rejected'
+        );
+        if(alreadyPending){
+          al.innerHTML = '⏳ <b>এই মোবাইল নম্বর দিয়ে আগেই আবেদন করা হয়েছে।</b><br>অনুমোদনের অপেক্ষা করুন অথবা মেস পরিচালকের সাথে যোগাযোগ করুন।';
+          al.className = 'alert alert-warning show';
+          if(btn){ btn.disabled=false; btn.textContent='Register করুন'; }
+          return;
+        }
+      } catch(checkErr) {
+        // নেটওয়ার্ক সমস্যায় check ব্যর্থ হলে সতর্ক করো, কিন্তু আটকাবো না
+        console.warn('[doRegister] pendingApprovals check failed (network?):', checkErr);
+      }
+
+      // ── এখানে এসে মানে duplicate নেই — registration চালু করো ──
+      if(btn) btn.textContent='রেজিস্ট্রেশন হচ্ছে...';
+
+      // Set guard flag BEFORE creating the user so that onAuthStateChanged
+      // does not race us to signOut() before sendEmailVerification() fires.
+      _registrationInProgress = true;
+
       // Step 1 — Create the Firebase Auth account
       const cred = await auth.createUserWithEmailAndPassword(email, pass);
       const user = cred.user;

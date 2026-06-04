@@ -228,7 +228,33 @@ function approvePendingUser(uid, p){
   if(!uid||!p) return Promise.reject('invalid');
   const uObj={name:p.name, mobile:p.mobile, jobId:p.jobId||'', u:p.u||('u_'+p.mobile),
     room:p.room||'', type:p.type||'inside', role:'member', createdAt:tod()};
-  return firebase.database().ref('users/'+uid).set(uObj)
+
+  // ✅ নতুন: approve করার আগে একই mobile-এর সব duplicate pending entries reject করো।
+  // কারণ: doRegister()-এ bug বা network retry-এর কারণে একই user দুইবার register
+  // করলে দুটো pendingApprovals entry তৈরি হয়। controller দুটোই approve করলে
+  // Firebase Auth-এ orphaned account থাকে এবং সদস্য data এলোমেলো হয়।
+  // সমাধান: এই uid approve করার সময় বাকি duplicate entries auto-reject করো।
+  const cleanupDuplicates = firebase.database().ref('pendingApprovals').once('value')
+    .then(allSnap => {
+      const allPend = allSnap.val() || {};
+      const rejectPromises = Object.entries(allPend)
+        .filter(([pUid, pData]) =>
+          pUid !== uid &&                       // এই uid নয় (যেটা approve হচ্ছে)
+          pData &&
+          pData.mobile === p.mobile &&           // same mobile number = same person
+          pData.status === 'pending'             // এখনো pending আছে
+        )
+        .map(([pUid]) => {
+          console.log('[approvePendingUser] Auto-rejecting duplicate pending:', pUid);
+          return firebase.database().ref('pendingApprovals/'+pUid+'/status').set('rejected');
+        });
+      return Promise.all(rejectPromises);
+    })
+    .catch(e => { console.warn('[approvePendingUser] cleanupDuplicates warning:', e); });
+  // error হলেও proceed করো — main approval আটকাবো না
+
+  return cleanupDuplicates
+    .then(()=>firebase.database().ref('users/'+uid).set(uObj))
     .then(()=>firebase.database().ref('roles/'+uid).set({role:'member'}))
     .then(()=>{
       // ✅ transaction: current Firebase array পড়ে, নতুন user যোগ করে, atomic write করে।
