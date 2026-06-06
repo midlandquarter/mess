@@ -602,6 +602,15 @@ function loadDB(){
       const data=snap.val();
       if(data){
         GLOBAL_FIELDS.forEach(f=>{ if(data[f]!==undefined) DB[f]=data[f]; });
+        // ✅ FIX: Firebase-এ array-এ null থাকলে (সরাসরি DB থেকে delete করলে)
+        // Firebase SDK object হিসেবে return করে — DB.users.find() crash করে।
+        // সব সময় নিশ্চিত করো DB.users একটি array।
+        if(!Array.isArray(DB.users)){
+          DB.users = Object.values(DB.users || {}).filter(Boolean);
+          console.warn('[db] DB.users was not an array — converted from object. Check Firebase for null/sparse entries in global/users.');
+        }
+        // Null entries filter করো
+        DB.users = DB.users.filter(u => u && u.u);
         // ✅ GLOBAL_FIELDS-এ নেই — manually load করো
         if(data.controllers !==undefined) DB.controllers  = data.controllers;
         if(data.prevBalances!==undefined) DB.prevBalances = data.prevBalances;

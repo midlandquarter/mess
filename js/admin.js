@@ -1209,7 +1209,8 @@ function doApproveUser(uid){
     firebase.database().ref('pendingApprovals/'+uid).once('value').then(snap=>{
       const p=snap.val();
       if(!p){ toast('❌ আবেদন পাওয়া যায়নি!'); return; }
-      if(DB.users.find(x=>x.u===p.u||x.u===('u_'+(p.mobile||'')))){
+      const _uArr = Array.isArray(DB.users) ? DB.users : Object.values(DB.users||{}).filter(Boolean);
+      if(_uArr.find(x=>x.u===p.u||x.u===('u_'+(p.mobile||'')))){
         toast('❌ এই মোবাইল নম্বরে ইতিমধ্যে সদস্য আছে!');
         firebase.database().ref('pendingApprovals/'+uid).remove();
         initApprovalPanel(); return;
