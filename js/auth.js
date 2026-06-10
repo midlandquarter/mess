@@ -459,10 +459,23 @@ function doResendFromCard(){
 }
 
 function resendVerificationEmail(email, pass){
-  // Sign in temporarily to get the user object for resend
+  // ✅ FIX: _registrationInProgress guard যোগ করা হয়েছে।
+  // Bug: signInWithEmailAndPassword সফল হলে onAuthStateChanged fire করে।
+  // সেখানে emailVerified=false দেখলে auth.signOut() call হয় —
+  // ফলে sendEmailVerification() চলার আগেই session শেষ হয়ে যায়।
+  // doResendFromCard()-এর মতো এখানেও guard দরকার।
+  _registrationInProgress = true; // onAuthStateChanged কে suppress করো
   auth.signInWithEmailAndPassword(email, pass).then(cred=>{
-    return cred.user.sendEmailVerification().then(()=>{ auth.signOut(); toast('✅ Verification email পাঠানো হয়েছে! ইনবক্স চেক করুন।'); });
-  }).catch(err=>{ toast('❌ Email পাঠানো যায়নি: '+(err.message||'')); });
+    return cred.user.sendEmailVerification().then(()=>{
+      _registrationInProgress = false;
+      auth.signOut();
+      toast('✅ Verification email পাঠানো হয়েছে! ইনবক্স চেক করুন।');
+    });
+  }).catch(err=>{
+    _registrationInProgress = false;
+    auth.signOut().catch(()=>{}); // error-এও session সাফ করো
+    toast('❌ Email পাঠানো যায়নি: '+(err.message||''));
+  });
 }
 
 function doRegister(){

@@ -189,7 +189,7 @@ function saveUsers(){
   globalRef.child('users').set(DB.users).catch(e=>{ console.error('Users save error:',e); toast('⚠️ সদস্য সেভে সমস্যা!'); });
 }
 
-// ── deleteMemberFromDB: members.js-এর deleteMember()-এ call করো ─────────────
+// ── deleteMemberFromDB: admin.js deleteMember()-এ call করো ─────────────────
 // DB.users filter করার পরে, saveUsers()-এর আগে এই function call করো।
 //
 // কাজ তিনটা:
@@ -198,7 +198,11 @@ function saveUsers(){
 //      → refresh করলেও onAuthStateChanged সাথে সাথে বাউন্স করে ফেলবে
 //   ③ pendingApprovals/{uid} orphan cleanup
 //
-// Usage:
+// ⚠️ NOTE: admin.js deleteMember() নিজে _minUserCount সেট করে এবং RTDB cleanup
+// inline করে — তাই সেখান থেকে এই function call করা হয় না।
+// শুধু বাইরের কোড (যদি থাকে) থেকে call করার জন্য রাখা।
+//
+// Usage (outside admin.js):
 //   deleteMemberFromDB(targetUid).then(()=>{ saveUsers(); toast('✅ সদস্য মুছে ফেলা হয়েছে'); });
 function deleteMemberFromDB(uid){
   if(!uid||!_dbLoaded) return Promise.resolve();
@@ -239,7 +243,18 @@ function saveMonth(){
     currentMonthRef.update(data).catch(e=>{ console.error('Month save error:',e); toast('⚠️ ডেটা সেভে সমস্যা! ইন্টারনেট চেক করুন।'); });
   }, 400);
 }
-function saveMealEntry(k,v){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('meals').child(k).set(v).catch(e=>console.error('Meal:',e)); }
+function saveMealEntry(k, v, mealMmKey){
+  if(!_dbLoaded) return;
+  // ✅ FIX: mealMmKey দেওয়া থাকলে সেই মাসের Firebase bucket-এ save করো।
+  // Bug: আগে সবসময় currentMonthRef-এ যেত।
+  // ফলে user যদি পরবর্তী মাসের জন্য আগাম meal দেয়
+  // (extendToNext=true), সেটা ভুল bucket-এ সেভ হতো।
+  const targetRef = (mealMmKey && mealMmKey !== currentMonthKey && monthsRef)
+    ? monthsRef.child(mealMmKey)
+    : currentMonthRef;
+  if(!targetRef) return;
+  targetRef.child('meals').child(k).set(v).catch(e => console.error('Meal:', e));
+}
 function saveBazarItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('bazar').child(String(item.id)).set(item).catch(e=>console.error('Bazar:',e)); }
 function deleteBazarItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('bazar').child(String(id)).remove().catch(e=>console.error('BazarDel:',e)); }
 function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('others').child(String(item.id)).set(item).catch(e=>console.error('Others:',e)); }

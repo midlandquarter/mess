@@ -230,6 +230,10 @@ function memdetTab(tab){
   }
 }
 function toggleBlockMember(){
+  // ✅ FIX: isOnline() চেক যোগ করা হয়েছে
+  // Bug: অফলাইনে block করলে saveGlobal()+saveUsers() শুধু local memory পরিবর্তন করে।
+  // Firebase-এ যায় না। Online হলে পুরনো data overwrite করে undo হয়ে যাওয়ার risk।
+  if(!isOnline()){ noNetPopup(); return; }
   const u=DB.users.find(x=>x.u===currentDetailUser); if(!u) return;
   const action=u.blocked?'আনব্লক':'ব্লক';
   showModal(`${action} করুন`,`${u.name} কে ${action} করবেন?`,()=>{
@@ -327,15 +331,24 @@ function saveProfile(){
     DB.transactions.forEach(t=>{ if(t.uname===oldId){ t.uname=newId; saveTxItem(t); } });
     // ── Meals: key format = "userId_YYYY-MM-DD" — Object.values() ভুল ছিল ──
     // ✅ FIX: Object.keys() দিয়ে prefix match করো
+    // ✅ FIX 2: প্রতিটি meal entry সঠিক মাসের bucket-এ save করো
+    // Bug: saveMealEntry(newKey, ...) এ মাসের parameter ছিল না —
+    // সব meal currentMonthRef-এ যেত, historical meals ভুল bucket-এ পড়ত।
     const _mealKeys=Object.keys(DB.meals||{});
     _mealKeys.forEach(key=>{
       if(key.startsWith(oldId+'_')){
-        const newKey=newId+'_'+key.slice(oldId.length+1);
+        const dateStr = key.slice(oldId.length+1); // YYYY-MM-DD অংশ
+        const mealMmKey = messMonthKey(new Date(dateStr)); // সঠিক মেস মাস
+        const newKey=newId+'_'+dateStr;
         DB.meals[newKey]=DB.meals[key];
         delete DB.meals[key];
-        // Firebase: নতুন key save + পুরনো key delete
-        saveMealEntry(newKey, DB.meals[newKey]);
-        if(currentMonthRef) currentMonthRef.child('meals').child(key).remove().catch(()=>{});
+        // ✅ সঠিক bucket-এ নতুন key save
+        saveMealEntry(newKey, DB.meals[newKey], mealMmKey);
+        // ✅ সঠিক bucket থেকে পুরনো key delete
+        const oldBucketRef = (mealMmKey !== currentMonthKey && monthsRef)
+          ? monthsRef.child(mealMmKey)
+          : currentMonthRef;
+        if(oldBucketRef) oldBucketRef.child('meals').child(key).remove().catch(()=>{});
       }
     });
     cu.u=newId; CU.u=newId;

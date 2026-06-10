@@ -226,6 +226,10 @@ function _withMonthData(mmKey, loadingEl, renderFn, forceRefresh=false){
     _histViewMode = false;
   }).catch(e=>{
     console.error('_withMonthData error:',e);
+    // ✅ FIX: _histViewMode reset করো
+    // Bug: error হলে _histViewMode = true রয়ে যেত।
+    // ফলে current month-এ ফিরে গেলেও edit/delete buttons দেখা যেত না।
+    _histViewMode = false;
     if(loadingEl) loadingEl.innerHTML='<p class="muted tc">❌ লোড ব্যর্থ। পুনরায় চেষ্টা করুন।</p>';
   });
 }

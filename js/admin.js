@@ -290,7 +290,13 @@ function resetHandoverLock(){
       // পরের মাসের prevBalances মুছো
       const nextKey=nextCycleKey(mmKey);
       if(DB.prevBalances&&DB.prevBalances[nextKey]) delete DB.prevBalances[nextKey];
-      saveGlobal();  // শুধু global — month data ছোঁব না
+      // ✅ FIX: saveGlobal() → saveHandover()
+      // Bug: GLOBAL_FIELDS = ['users','cfg','siteNote','notice','shortfall'] —
+      // handoverDone এবং prevBalances এতে নেই!
+      // saveGlobal() এই দুটো field লিখতই পারে না।
+      // ফলে reset করলে DB মেমরিতে পরিবর্তন হতো কিন্তু Firebase-এ কিছু সেভ হতো না।
+      // পেজ refresh করলে পুরনো lock ফিরে আসত।
+      saveHandover(); // controller-only path → handoverDone + prevBalances সেভ হবে
       toast('✅ লক রিসেট হয়েছে। এখন সঠিক মাস হস্তান্তর করুন।');
     });
 }
@@ -451,6 +457,8 @@ function deleteMember(){
   const uname=document.getElementById('del-mem-sel').value; if(!uname){ toast('❌ সদস্য নির্বাচন করুন!'); return; }
   const u=DB.users.find(x=>x.u===uname);
   showModal('সদস্য মুছুন',`${u?.name||uname} কে স্থায়ীভাবে মুছে ফেলবেন? সব ডেটা হারিয়ে যাবে!`,()=>{
+    // ✅ FIX: RTDB cleanup-এর জন্য uid আগেই নাও — DB.users filter করার পরে u হারিয়ে যাবে
+    const targetUid = u?.uid;
     DB.users=DB.users.filter(x=>x.u!==uname);
     DB.controllers=DB.controllers.filter(c=>c!==uname);
     Object.keys(DB.managers).forEach(m=>{ DB.managers[m]=(DB.managers[m]||[]).filter(u=>u!==uname); });
@@ -458,6 +466,16 @@ function deleteMember(){
     if(typeof _minUserCount!=='undefined') _minUserCount=Math.max(0,new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size);
     saveControllers(); saveGlobal(); saveUsers(); // ✅ controllers আলাদা path
     currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+    // ✅ FIX: RTDB node cleanup — users/{uid} + roles/{uid} + pendingApprovals/{uid}
+    // Bug: আগে এই cleanup ছিল না।
+    // users/{uid} থেকে যায় → deleted user পেজ refresh করলে onAuthStateChanged
+    // users/{uid} পড়ে ভেতরে ঢুকে যেত (_waitUntilReady-এ global/users চেক করে kick করে,
+    // কিন্তু এই orphan node থাকলে RTDB স্পেস নষ্ট হয় + security hole থাকে)।
+    if(targetUid){
+      firebase.database().ref('users/'+targetUid).remove().catch(()=>{});
+      firebase.database().ref('roles/'+targetUid).remove().catch(()=>{});
+      firebase.database().ref('pendingApprovals/'+targetUid).remove().catch(()=>{});
+    }
     closeAdmPopup(); initAdmin(); toast('✅ সদস্য মুছে ফেলা হয়েছে!');
   });
 }
@@ -1208,12 +1226,20 @@ function doApproveUser(uid){
   showModal('সদস্য অনুমোদন','এই সদস্যকে মেসে যোগ দেওয়ার অনুমতি দেবেন?',()=>{
     firebase.database().ref('pendingApprovals/'+uid).once('value').then(snap=>{
       const p=snap.val();
-      if(!p){ toast('❌ আবেদন পাওয়া যায়নি!'); return; }
+      if(!p){
+        toast('❌ আবেদন পাওয়া যায়নি!');
+        // ✅ FIX: return → throw
+        // Bug: return undefined করলে পরের .then() চলে যেত →
+        // "✅ সদস্য অনুমোদিত হয়েছে!" toast দেখাত যদিও কিছুই হয়নি।
+        throw Object.assign(new Error('not_found'), { _handled: true });
+      }
       const _uArr = Array.isArray(DB.users) ? DB.users : Object.values(DB.users||{}).filter(Boolean);
       if(_uArr.find(x=>x.u===p.u||x.u===('u_'+(p.mobile||'')))){
         toast('❌ এই মোবাইল নম্বরে ইতিমধ্যে সদস্য আছে!');
         firebase.database().ref('pendingApprovals/'+uid).remove();
-        initApprovalPanel(); return;
+        initApprovalPanel();
+        // ✅ FIX: return → throw
+        throw Object.assign(new Error('duplicate'), { _handled: true });
       }
       return approvePendingUser(uid, p);
     }).then(()=>{
@@ -1223,7 +1249,10 @@ function doApproveUser(uid){
       _updateApprovalBadge(rem);
       if(!rem){ const l=document.getElementById('approval-list'); if(l) l.innerHTML='<div style="text-align:center;padding:16px;opacity:.6">✅ কোনো অপেক্ষমাণ আবেদন নেই।</div>'; }
       initAdmin(); // dropdown list আপডেট
-    }).catch(e=>{ console.error(e); toast('❌ অনুমোদনে সমস্যা!'); });
+    }).catch(e=>{
+      // _handled=true মানে already user-friendly toast দেওয়া হয়েছে
+      if(!e?._handled){ console.error(e); toast('❌ অনুমোদনে সমস্যা!'); }
+    });
   });
 }
 function doRejectUser(uid){

@@ -173,7 +173,13 @@ function showMemberBalance(){
   info.className='alert '+(bal>=0?'alert-success':'alert-danger')+' show';
   info.textContent=`${u.name} এর বর্তমান ব্যালেন্স: ৳ ${Math.abs(bal).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})} (${bal>=0?'জমা আছে':'বকেয়া আছে'})`;
 }
+// ✅ FIX: double-submit guard — rapid tap-এ duplicate transaction ঠেকাতে
+let _depositSaving = false;
 function saveDeposit(){
+  // ✅ FIX: একই সাথে দুইবার save হওয়া বন্ধ করো
+  // Bug: Manager দ্রুত দুইবার tap করলে দুটো আলাদা ID-র transaction তৈরি হয়।
+  // genId()-এর random component থাকলেও local DB.transactions-এ দুটো entry push হয়।
+  if(_depositSaving){ return; }
   if(!isOnline()){ noNetPopup(); return; }
   const uname=document.getElementById('dep-mem').value;
   const type=document.getElementById('dep-type').value;
@@ -185,12 +191,14 @@ function saveDeposit(){
   if(!date){ toast('❌ তারিখ দিন!'); return; }
   if(!['deposit','withdraw'].includes(type)){ toast('❌ ধরন নির্বাচন করুন!'); return; }
   const u=DB.users.find(x=>x.u===uname); if(!u){ toast('❌ সদস্য পাওয়া যায়নি!'); return; }
+  _depositSaving = true; // 🔒 lock — এখন থেকে duplicate call block
   const _txi={id:genId(),uname,type,amount,date,note,by:CU.u};
   DB.transactions.push(_txi);
   // balance সবসময় getPreBal + transactions থেকে calculate হয়
   saveTxItem(_txi); renderDepHistory(); showMemberBalance(); renderDepMyBalance(); renderDepMyHistory();
   document.getElementById('dep-amt').value='';
   document.getElementById('dep-note').value='';
+  _depositSaving = false; // 🔓 unlock — UI render শেষ
   const _tmk=messMonthKey();
   const _tDep=(DB.transactions||[]).filter(tx=>tx.uname===u.u&&tx.type==='deposit'&&dateInMessMonth(tx.date,_tmk)).reduce((s,tx)=>s+(tx.amount||0),0);
   const _tWith=(DB.transactions||[]).filter(tx=>tx.uname===u.u&&tx.type==='withdraw'&&dateInMessMonth(tx.date,_tmk)).reduce((s,tx)=>s+(tx.amount||0),0);
