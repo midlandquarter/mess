@@ -152,22 +152,47 @@ function fillMessCycleSelect(sel, months=12, addBlank=false){
   }
 }
 
-// ── ইতিহাস screen: শুধু handoverDone মাস দেখাও + current মাস ──
+// ── ইতিহাস screen: মাস dropdown populate ──
 function fillHistorySelect(sel, months=12){
   if(!sel) return;
   const mnames=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
   const currentKey = messMonthKey();
-  // handoverDone + current month — sort newest first
-  const validMonths = [...new Set([...(DB.handoverDone||[]), currentKey])].sort().reverse();
-  sel.innerHTML='<option value="">-- মাস সিলেক্ট করুন --</option>';
-  validMonths.forEach(key=>{
-    const {y,m} = getMessMonth(new Date(key+'-15'));
-    const nm=(m+1)%12;
-    const opt=document.createElement('option');
-    opt.value=key;
-    opt.textContent=`${mnames[m]} ১১ – ${mnames[nm]} ১০, ${y}`;
-    sel.appendChild(opt);
-  });
+
+  // options render helper — selection preserve করে
+  function _renderOpts(keys){
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">-- মাস সিলেক্ট করুন --</option>';
+    keys.forEach(key => {
+      const {y,m} = getMessMonth(new Date(key+'-15'));
+      const nm = (m+1)%12;
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = `${mnames[m]} ১১ – ${mnames[nm]} ১০, ${y}`;
+      if(key === prev) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ── Step 1 (sync): handoverDone + current month সাথে সাথে দেখাও ──
+  const fromHandover = [...new Set([...(DB.handoverDone||[]), currentKey])].sort().reverse();
+  _renderOpts(fromHandover);
+
+  // ── Step 2 (async): Firebase months bucket থেকে বাকি মাস নাও ──
+  // FIX: handoverDone empty বা incomplete থাকলেও Firebase-এ যে মাসের
+  // data আছে সেগুলো dropdown-এ দেখাবে।
+  // Bug: DB.handoverDone === null হলে শুধু current month দেখাত —
+  // আগের মাসের data থাকলেও select করার উপায় ছিল না।
+  if(monthsRef){
+    monthsRef.once('value').then(snap => {
+      if(!snap.exists()) return;
+      const fbKeys = Object.keys(snap.val() || {});
+      const combined = [...new Set([...fbKeys, ...(DB.handoverDone||[]), currentKey])].sort().reverse();
+      // নতুন মাস পাওয়া গেলেই re-render করো
+      if(combined.length > fromHandover.length){
+        _renderOpts(combined);
+      }
+    }).catch(() => {});
+  }
 }
 
 // ── Session-level historical data cache — Firebase reads কমাতে ──
