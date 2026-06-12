@@ -206,7 +206,27 @@ function _clearHistCache(){ Object.keys(_histCache).forEach(k=>delete _histCache
 function _swapAndRender(hist, renderFn){
   const saved = {};
   MONTH_FIELDS.forEach(f=>{ saved[f]=DB[f]; });
-  MONTH_FIELDS.forEach(f=>{ DB[f]=hist[f]||(f==='meals'||f==='managers'||f==='mealRates'||f==='officeMealRates'?{}:[]); });
+
+  // ✅ FIX: Firebase array fields normalize করো
+  // Bug: Firebase-এ bazar/others/transactions/cookBills object হিসেবে store হয়
+  // (e.g. {"1780489892497": {id,desc,amount,...}})।
+  // hist[f] সরাসরি DB[f]-এ রাখলে .filter()/.map() crash করে।
+  // _ensureArr() → Array.isArray check করে, object হলে Object.values() দেয়।
+  const _HIST_ARR = new Set(['bazar','others','transactions','cookBills']);
+  MONTH_FIELDS.forEach(f=>{
+    if(!hist[f]){
+      // data নেই — সঠিক default দাও
+      DB[f] = (f==='meals'||f==='managers'||f==='mealRates'||f==='officeMealRates'||f==='officeMealNotes') ? {} : [];
+    } else if(_HIST_ARR.has(f)){
+      // _ensureArr: db.js-এ defined (global)। inline fallback safety-র জন্য।
+      DB[f] = (typeof _ensureArr==='function')
+        ? _ensureArr(hist[f])
+        : (Array.isArray(hist[f]) ? hist[f] : Object.values(hist[f]||{}).filter(Boolean));
+    } else {
+      DB[f] = hist[f];
+    }
+  });
+
   invalidateMealIndex(); invalidateMealRateCache();
   try{ renderFn(); } finally {
     MONTH_FIELDS.forEach(f=>{ DB[f]=saved[f]; });
