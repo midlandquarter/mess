@@ -660,30 +660,49 @@ function downloadDayPDF(){
 
   const wrap=document.createElement('div');
   // ✅ FIX 1: position:fixed → position:absolute
-  // Bug: position:fixed viewport-এর বাইরে render করে না।
-  // member list বড় হলে নিচের অংশ html2canvas ধরতে পারে না → শেষের members PDF-এ আসে না।
-  // position:absolute হলে document-এর পুরো height capture হয়।
+  // position:fixed viewport-এ clip হয় → বড় list-এ শেষের rows আসে না।
+  // position:absolute হলে full document height capture হয়।
   wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
   wrap.innerHTML=html;
   document.body.appendChild(wrap);
+
+  // ✅ FIX 3: Smart page break — html2canvas call-এর আগে row heights নাও
+  // getBoundingClientRect() layout flush force করে → সঠিক values পাওয়া যায়।
+  // scale=2.5 দিয়ে canvas pixel-এ convert করো।
+  const _tableEl=wrap.firstChild;
+  const _tableTop=_tableEl.getBoundingClientRect().top;
+  const _rowEls=Array.from(_tableEl.querySelectorAll('tbody tr,tfoot tr'));
+  const _rowBottomsPx=_rowEls.map(r=>(r.getBoundingClientRect().bottom-_tableTop)*2.5);
+
   toast('⏳ PDF তৈরি হচ্ছে...');
-  html2canvas(wrap.firstChild,{scale:2.5,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
+  html2canvas(_tableEl,{scale:2.5,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
     document.body.removeChild(wrap);
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const imgW=210, imgH=(canvas.height*imgW)/canvas.width;
     const pageH=297;
-    let yPos=0;
-    while(yPos<imgH){
-      if(yPos>0) doc.addPage();
-      // ✅ FIX 2: y offset formula সংশোধন
-      // Bug: -yPos*canvas.width/imgW/2.5 → page 2-এ y≈-1018mm হতো → blank page
-      // jsPDF unit='mm', তাই y সরাসরি mm-এ দিতে হয়।
-      // Page 2: y=-297mm মানে ঠিক এক পেজ উপরে — সব দেখা যায়।
-      doc.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',0,-yPos,imgW,imgH);
-      yPos+=pageH;
+    // ✅ FIX 2: pxPerMm দিয়ে সঠিক mm→px conversion
+    // আগে: -yPos*canvas.width/imgW/2.5 → page 2-এ y≈-1018mm → blank
+    // এখন: startPx/pxPerMm → সঠিক mm offset
+    const pxPerMm=canvas.width/imgW;
+    const pageHPx=Math.floor(pageH*pxPerMm);
+
+    // ✅ FIX 3: Row-aware page breaks — row মাঝখানে কাটবে না
+    const pageStartsPx=[0];
+    let cur=0;
+    while(true){
+      const idealEnd=cur+pageHPx;
+      if(idealEnd>=canvas.height) break;
+      // এই page-এ পুরো fit করে এমন শেষ row খুঁজো
+      const fitting=_rowBottomsPx.filter(b=>b>cur&&b<=idealEnd);
+      const breakAt=fitting.length>0 ? Math.floor(fitting[fitting.length-1]) : idealEnd;
+      pageStartsPx.push(breakAt);
+      cur=breakAt;
     }
-    // File name: DD.MM.YY_mealsheet
+    pageStartsPx.forEach((startPx,i)=>{
+      if(i>0) doc.addPage();
+      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',0,-(startPx/pxPerMm),imgW,imgH);
+    });
     doc.save(`${dd}.${mm}.${yy}_mealsheet.pdf`);
     toast('✅ PDF তৈরি হয়েছে!');
   }).catch(e=>{ document.body.removeChild(wrap); toast('❌ PDF তৈরিতে সমস্যা!'); console.error(e); });
