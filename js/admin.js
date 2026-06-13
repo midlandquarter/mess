@@ -595,7 +595,7 @@ function downloadDayPDF(){
 
     rows+=`<tr style="background:${bg};border-top:1px solid #e8f0eb;">
       <td style="padding:2px 4px;font-size:10px;color:#555;white-space:nowrap;">${String(u.job||u.u).substring(0,8)}</td>
-      <td style="padding:2px 4px;font-size:10px;font-weight:600;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(u.name||'').substring(0,16)}</td>
+      <td style="padding:2px 4px;font-size:10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(u.name||'').substring(0,25)}</td>
       ${cell(bm,bv)}${cell(lm,lv)}${cell(dm,dv)}
       <td style="text-align:right;padding:2px 6px;font-weight:${totWeight};color:${totColor};font-size:10px;">${isOff?'—':rowTot}</td>
     </tr>`;
@@ -637,7 +637,7 @@ function downloadDayPDF(){
       <thead>
         <tr style="background:#1a6b3c;color:#fff;">
           <th style="padding:4px 4px;text-align:left;width:55px;">ID</th>
-          <th style="padding:4px 4px;text-align:left;width:120px;">Name</th>
+          <th style="padding:4px 4px;text-align:left;width:150px;">Name</th>
           <th style="padding:4px 4px;text-align:center;width:60px;">Morning</th>
           <th style="padding:4px 4px;text-align:center;width:60px;">Lunch</th>
           <th style="padding:4px 4px;text-align:center;width:60px;">Night</th>
@@ -659,43 +659,41 @@ function downloadDayPDF(){
   </div>`;
 
   const wrap=document.createElement('div');
-  // ✅ FIX 1: position:fixed → position:absolute
-  // position:fixed viewport-এ clip হয় → বড় list-এ শেষের rows আসে না।
-  // position:absolute হলে full document height capture হয়।
+  // FIX 1: position:absolute — full height, no viewport clipping
   wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
   wrap.innerHTML=html;
   document.body.appendChild(wrap);
 
-  // ✅ FIX 3: Smart page break — html2canvas call-এর আগে row heights নাও
-  // getBoundingClientRect() layout flush force করে → সঠিক values পাওয়া যায়।
-  // scale=2.5 দিয়ে canvas pixel-এ convert করো।
-  const _tableEl=wrap.firstChild;
-  const _tableTop=_tableEl.getBoundingClientRect().top;
-  const _rowEls=Array.from(_tableEl.querySelectorAll('tbody tr,tfoot tr'));
-  const _rowBottomsPx=_rowEls.map(r=>(r.getBoundingClientRect().bottom-_tableTop)*2.5);
+  // FIX 3: Smart page break — offsetTop ব্যবহার করো, getBoundingClientRect() না
+  // কারণ: getBoundingClientRect() off-screen element-এ (left:-9999px) ভুল/zero দেয়।
+  // offsetTop layout-based → off-screen হলেও সঠিক মান দেয়।
+  const _tEl=wrap.firstChild;
+  const _tbl=_tEl.querySelector('table');
+  void _tEl.offsetHeight; // force layout reflow
+  // table.offsetTop = wrap top থেকে table top = header + summary height
+  const _tblTopPx=(_tbl?_tbl.offsetTop:0)*2.5;
+  // tr.offsetTop = table top থেকে row top (offsetParent = table)
+  const _rEls=Array.from(_tEl.querySelectorAll('tbody tr,tfoot tr'));
+  const _rBottomsPx=_rEls.map(r=>_tblTopPx+(r.offsetTop+r.offsetHeight)*2.5);
 
   toast('⏳ PDF তৈরি হচ্ছে...');
-  html2canvas(_tableEl,{scale:2.5,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
+  html2canvas(_tEl,{scale:2.5,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
     document.body.removeChild(wrap);
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const imgW=210, imgH=(canvas.height*imgW)/canvas.width;
+    const imgW=210,imgH=(canvas.height*imgW)/canvas.width;
     const pageH=297;
-    // ✅ FIX 2: pxPerMm দিয়ে সঠিক mm→px conversion
-    // আগে: -yPos*canvas.width/imgW/2.5 → page 2-এ y≈-1018mm → blank
-    // এখন: startPx/pxPerMm → সঠিক mm offset
+    // FIX 2: সঠিক mm conversion — addImage coordinate mm-এ
     const pxPerMm=canvas.width/imgW;
     const pageHPx=Math.floor(pageH*pxPerMm);
 
-    // ✅ FIX 3: Row-aware page breaks — row মাঝখানে কাটবে না
+    // FIX 3: row-aware split — row মাঝখানে কাটে না
     const pageStartsPx=[0];
     let cur=0;
-    while(true){
+    while(cur+pageHPx<canvas.height){
       const idealEnd=cur+pageHPx;
-      if(idealEnd>=canvas.height) break;
-      // এই page-এ পুরো fit করে এমন শেষ row খুঁজো
-      const fitting=_rowBottomsPx.filter(b=>b>cur&&b<=idealEnd);
-      const breakAt=fitting.length>0 ? Math.floor(fitting[fitting.length-1]) : idealEnd;
+      const fitting=_rBottomsPx.filter(b=>b>cur&&b<=idealEnd);
+      const breakAt=fitting.length>0?Math.floor(fitting[fitting.length-1]):idealEnd;
       pageStartsPx.push(breakAt);
       cur=breakAt;
     }
