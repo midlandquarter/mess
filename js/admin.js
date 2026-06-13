@@ -659,7 +659,11 @@ function downloadDayPDF(){
   </div>`;
 
   const wrap=document.createElement('div');
-  wrap.style.cssText='position:fixed;left:-9999px;top:0;z-index:-1;';
+  // ✅ FIX 1: position:fixed → position:absolute
+  // Bug: position:fixed viewport-এর বাইরে render করে না।
+  // member list বড় হলে নিচের অংশ html2canvas ধরতে পারে না → শেষের members PDF-এ আসে না।
+  // position:absolute হলে document-এর পুরো height capture হয়।
+  wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
   wrap.innerHTML=html;
   document.body.appendChild(wrap);
   toast('⏳ PDF তৈরি হচ্ছে...');
@@ -672,7 +676,11 @@ function downloadDayPDF(){
     let yPos=0;
     while(yPos<imgH){
       if(yPos>0) doc.addPage();
-      doc.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',0,-yPos*canvas.width/imgW/2.5,imgW,imgH);
+      // ✅ FIX 2: y offset formula সংশোধন
+      // Bug: -yPos*canvas.width/imgW/2.5 → page 2-এ y≈-1018mm হতো → blank page
+      // jsPDF unit='mm', তাই y সরাসরি mm-এ দিতে হয়।
+      // Page 2: y=-297mm মানে ঠিক এক পেজ উপরে — সব দেখা যায়।
+      doc.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',0,-yPos,imgW,imgH);
       yPos+=pageH;
     }
     // File name: DD.MM.YY_mealsheet
