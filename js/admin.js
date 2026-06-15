@@ -572,138 +572,109 @@ function downloadDayPDF(){
     return String(a.job||'').localeCompare(String(b.job||''));
   });
 
-  // ── Rows: compact ──
-  let rows='';
+  // ── Rows: প্রতিটা row আলাদা string array-এ ──
+  const rowHtmlArr=[];
+  const cell=(m,v)=>{
+    if(m.t==='off') return `<td style="text-align:center;color:#bbb;padding:2px 4px;">—</td>`;
+    const q=m.q&&m.q>1?m.q:1;
+    const label=m.t+(q>1?'×'+q:'');
+    const c=m.t==='P'?'#1a6b3c':'#1565c0';
+    return `<td style="text-align:center;font-weight:700;color:${c};padding:2px 4px;">${label}</td>`;
+  };
   sorted.forEach((u,ri)=>{
     const meal=DB.meals[u.u+'_'+dt]||{};
     const bm=meal.b||{t:'off',q:1}, lm=meal.l||{t:'off',q:1}, dm=meal.d||{t:'off',q:1};
     const bv=mTV('b',bm,dt,u.type), lv=mTV('l',lm,dt,u.type), dv=mTV('d',dm,dt,u.type);
     const rowTot=(bv+lv+dv).toFixed(2);
     const bg=ri%2===0?'#f7f9f7':'#ffffff';
-
-    const cell=(m,v)=>{
-      if(m.t==='off') return `<td style="text-align:center;color:#bbb;padding:2px 4px;">—</td>`;
-      const q=m.q&&m.q>1?m.q:1;
-      const label=m.t+(q>1?'×'+q:'');
-      const c=m.t==='P'?'#1a6b3c':'#1565c0';
-      return `<td style="text-align:center;font-weight:700;color:${c};padding:2px 4px;">${label}</td>`;
-    };
-
     const isOff=(bm.t==='off'&&lm.t==='off'&&dm.t==='off');
     const totColor=isOff?'#bbb':'#1a2e22';
     const totWeight=isOff?'400':'700';
-
-    rows+=`<tr style="background:${bg};border-top:1px solid #e8f0eb;">
+    // ✅ FIX নাম: substring 16→25, max-width 90→150
+    rowHtmlArr.push(`<tr style="background:${bg};border-top:1px solid #e8f0eb;">
       <td style="padding:2px 4px;font-size:10px;color:#555;white-space:nowrap;">${String(u.job||u.u).substring(0,8)}</td>
       <td style="padding:2px 4px;font-size:10px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(u.name||'').substring(0,25)}</td>
       ${cell(bm,bv)}${cell(lm,lv)}${cell(dm,dv)}
       <td style="text-align:right;padding:2px 6px;font-weight:${totWeight};color:${totColor};font-size:10px;">${isOff?'—':rowTot}</td>
-    </tr>`;
+    </tr>`);
   });
 
-  const html=`<div style="font-family:Arial,sans-serif;background:#fff;padding:10px 14px;width:720px;color:#1a2e22;font-size:10px;">
-
-    <!-- Compact Header -->
+  // ── Shared HTML pieces ──
+  const _thead=`<thead><tr style="background:#1a6b3c;color:#fff;">
+    <th style="padding:4px 4px;text-align:left;width:55px;">ID</th>
+    <th style="padding:4px 4px;text-align:left;width:150px;">Name</th>
+    <th style="padding:4px 4px;text-align:center;width:60px;">Morning</th>
+    <th style="padding:4px 4px;text-align:center;width:60px;">Lunch</th>
+    <th style="padding:4px 4px;text-align:center;width:60px;">Night</th>
+    <th style="padding:4px 6px;text-align:right;width:60px;">Total</th>
+  </tr></thead>`;
+  const _tfoot=`<tfoot><tr style="background:#0f4526;color:#fff;font-weight:700;font-size:10px;">
+    <td colspan="2" style="padding:4px 4px;">Grand Total</td>
+    <td style="padding:4px 4px;text-align:center;">${totBQ} (${totBM.toFixed(2)})</td>
+    <td style="padding:4px 4px;text-align:center;">${totLQ} (${totLM.toFixed(2)})</td>
+    <td style="padding:4px 4px;text-align:center;">${totDQ} (${totDM.toFixed(2)})</td>
+    <td style="padding:4px 6px;text-align:right;color:#fcd34d;">${grandTotal}</td>
+  </tr></tfoot>`;
+  const _fullHeader=`
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a6b3c;padding-bottom:6px;margin-bottom:8px;">
       <div style="font-size:14px;font-weight:700;color:#1a6b3c;">Daily Meal Sheet</div>
-      <div style="text-align:right;">
-        <span style="font-size:13px;font-weight:700;">${dd}-${mm}-20${yy}</span>
-        <span style="font-size:10px;color:#666;margin-left:6px;">${dayName}</span>
-      </div>
+      <div style="text-align:right;"><span style="font-size:13px;font-weight:700;">${dd}-${mm}-20${yy}</span><span style="font-size:10px;color:#666;margin-left:6px;">${dayName}</span></div>
     </div>
-
-    <!-- Compact Summary -->
     <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <div style="flex:1;background:#fff8f0;border:1px solid #f0a05a;border-radius:5px;padding:4px 6px;text-align:center;">
-        <div style="font-size:9px;color:#888;">Morning</div>
-        <div style="font-size:13px;font-weight:700;color:#c45000;">${totBQ} <span style="font-size:9px;font-weight:400;">(${totBM.toFixed(2)})</span></div>
-      </div>
-      <div style="flex:1;background:#f0fff4;border:1px solid #5abf7a;border-radius:5px;padding:4px 6px;text-align:center;">
-        <div style="font-size:9px;color:#888;">Lunch</div>
-        <div style="font-size:13px;font-weight:700;color:#1a6b3c;">${totLQ} <span style="font-size:9px;font-weight:400;">(${totLM.toFixed(2)})</span></div>
-      </div>
-      <div style="flex:1;background:#f0f4ff;border:1px solid #5a7abf;border-radius:5px;padding:4px 6px;text-align:center;">
-        <div style="font-size:9px;color:#888;">Night</div>
-        <div style="font-size:13px;font-weight:700;color:#1565c0;">${totDQ} <span style="font-size:9px;font-weight:400;">(${totDM.toFixed(2)})</span></div>
-      </div>
-      <div style="flex:1;background:#1a6b3c;border-radius:5px;padding:4px 6px;text-align:center;">
-        <div style="font-size:9px;color:rgba(255,255,255,.8);">Total</div>
-        <div style="font-size:13px;font-weight:700;color:#fff;">${grandTotal}</div>
-      </div>
-    </div>
-
-    <!-- Table -->
-    <table style="width:100%;border-collapse:collapse;font-size:10px;">
-      <thead>
-        <tr style="background:#1a6b3c;color:#fff;">
-          <th style="padding:4px 4px;text-align:left;width:55px;">ID</th>
-          <th style="padding:4px 4px;text-align:left;width:150px;">Name</th>
-          <th style="padding:4px 4px;text-align:center;width:60px;">Morning</th>
-          <th style="padding:4px 4px;text-align:center;width:60px;">Lunch</th>
-          <th style="padding:4px 4px;text-align:center;width:60px;">Night</th>
-          <th style="padding:4px 6px;text-align:right;width:60px;">Total</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <tr style="background:#0f4526;color:#fff;font-weight:700;font-size:10px;">
-          <td colspan="2" style="padding:4px 4px;">Grand Total</td>
-          <td style="padding:4px 4px;text-align:center;">${totBQ} (${totBM.toFixed(2)})</td>
-          <td style="padding:4px 4px;text-align:center;">${totLQ} (${totLM.toFixed(2)})</td>
-          <td style="padding:4px 4px;text-align:center;">${totDQ} (${totDM.toFixed(2)})</td>
-          <td style="padding:4px 6px;text-align:right;color:#fcd34d;">${grandTotal}</td>
-        </tr>
-      </tfoot>
-    </table>
-    <div style="margin-top:6px;font-size:8px;color:#aaa;text-align:right;">P=Plant · Q=Quarter · off=— · Generated: ${dd}.${mm}.20${yy}</div>
+      <div style="flex:1;background:#fff8f0;border:1px solid #f0a05a;border-radius:5px;padding:4px 6px;text-align:center;"><div style="font-size:9px;color:#888;">Morning</div><div style="font-size:13px;font-weight:700;color:#c45000;">${totBQ} <span style="font-size:9px;font-weight:400;">(${totBM.toFixed(2)})</span></div></div>
+      <div style="flex:1;background:#f0fff4;border:1px solid #5abf7a;border-radius:5px;padding:4px 6px;text-align:center;"><div style="font-size:9px;color:#888;">Lunch</div><div style="font-size:13px;font-weight:700;color:#1a6b3c;">${totLQ} <span style="font-size:9px;font-weight:400;">(${totLM.toFixed(2)})</span></div></div>
+      <div style="flex:1;background:#f0f4ff;border:1px solid #5a7abf;border-radius:5px;padding:4px 6px;text-align:center;"><div style="font-size:9px;color:#888;">Night</div><div style="font-size:13px;font-weight:700;color:#1565c0;">${totDQ} <span style="font-size:9px;font-weight:400;">(${totDM.toFixed(2)})</span></div></div>
+      <div style="flex:1;background:#1a6b3c;border-radius:5px;padding:4px 6px;text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,.8);">Total</div><div style="font-size:13px;font-weight:700;color:#fff;">${grandTotal}</div></div>
+    </div>`;
+  const _contHeader=`<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a6b3c;padding-bottom:4px;margin-bottom:6px;">
+    <div style="font-size:12px;font-weight:700;color:#1a6b3c;">Daily Meal Sheet <span style="color:#888;font-weight:400;font-size:10px;">(continued)</span></div>
+    <span style="font-size:11px;font-weight:700;">${dd}-${mm}-20${yy} · ${dayName}</span>
   </div>`;
+  const _legend=`<div style="margin-top:6px;font-size:8px;color:#aaa;text-align:right;">P=Plant · Q=Quarter · off=— · Generated: ${dd}.${mm}.20${yy}</div>`;
 
-  const wrap=document.createElement('div');
-  // FIX 1: position:absolute — full height, no viewport clipping
-  wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
-  wrap.innerHTML=html;
-  document.body.appendChild(wrap);
+  // ✅ FIX: প্রতিটা page আলাদা HTML → আলাদা canvas → no row split
+  // canvas split করলে row মাঝখানে কাটে — এই approach-এ সেটা হওয়া সম্ভব না।
+  // A4 at 720px CSS width ≈ 1018px. Header~130px, row~17px → page1≈48 rows, rest≈55 rows
+  const ROWS_PG1=48, ROWS_PGN=55;
+  const chunks=[];
+  if(rowHtmlArr.length<=ROWS_PG1){ chunks.push(rowHtmlArr.slice()); }
+  else{
+    chunks.push(rowHtmlArr.slice(0,ROWS_PG1));
+    let rest=rowHtmlArr.slice(ROWS_PG1);
+    while(rest.length>0){ chunks.push(rest.slice(0,ROWS_PGN)); rest=rest.slice(ROWS_PGN); }
+  }
 
-  // FIX 3: Smart page break — offsetTop ব্যবহার করো, getBoundingClientRect() না
-  // কারণ: getBoundingClientRect() off-screen element-এ (left:-9999px) ভুল/zero দেয়।
-  // offsetTop layout-based → off-screen হলেও সঠিক মান দেয়।
-  const _tEl=wrap.firstChild;
-  const _tbl=_tEl.querySelector('table');
-  void _tEl.offsetHeight; // force layout reflow
-  // table.offsetTop = wrap top থেকে table top = header + summary height
-  const _tblTopPx=(_tbl?_tbl.offsetTop:0)*2.5;
-  // tr.offsetTop = table top থেকে row top (offsetParent = table)
-  const _rEls=Array.from(_tEl.querySelectorAll('tbody tr,tfoot tr'));
-  const _rBottomsPx=_rEls.map(r=>_tblTopPx+(r.offsetTop+r.offsetHeight)*2.5);
+  function _buildPage(rowSlice,isFirst,isLast){
+    return `<div style="font-family:Arial,sans-serif;background:#fff;padding:10px 14px;width:720px;color:#1a2e22;font-size:10px;">
+      ${isFirst?_fullHeader:_contHeader}
+      <table style="width:100%;border-collapse:collapse;font-size:10px;">
+        ${_thead}<tbody>${rowSlice.join('')}</tbody>${isLast?_tfoot:''}
+      </table>
+      ${isLast?_legend:''}
+    </div>`;
+  }
 
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const imgW=210;
+
+  // ✅ FIX file size: scale 2.5→2, quality 0.95→0.85 → ~50% ছোট file, মান ঠিক থাকবে
+  function _renderChunk(idx){
+    if(idx>=chunks.length){ doc.save(`${dd}.${mm}.${yy}_mealsheet.pdf`); toast('✅ PDF তৈরি হয়েছে!'); return; }
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
+    wrap.innerHTML=_buildPage(chunks[idx],idx===0,idx===chunks.length-1);
+    document.body.appendChild(wrap);
+    html2canvas(wrap.firstChild,{scale:2,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
+      document.body.removeChild(wrap);
+      if(idx>0) doc.addPage();
+      const imgH=(canvas.height*imgW)/canvas.width;
+      doc.addImage(canvas.toDataURL('image/jpeg',0.85),'JPEG',0,0,imgW,imgH);
+      _renderChunk(idx+1);
+    }).catch(e=>{ document.body.removeChild(wrap); toast('❌ PDF তৈরিতে সমস্যা!'); console.error(e); });
+  }
   toast('⏳ PDF তৈরি হচ্ছে...');
-  html2canvas(_tEl,{scale:2.5,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
-    document.body.removeChild(wrap);
-    const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const imgW=210,imgH=(canvas.height*imgW)/canvas.width;
-    const pageH=297;
-    // FIX 2: সঠিক mm conversion — addImage coordinate mm-এ
-    const pxPerMm=canvas.width/imgW;
-    const pageHPx=Math.floor(pageH*pxPerMm);
-
-    // FIX 3: row-aware split — row মাঝখানে কাটে না
-    const pageStartsPx=[0];
-    let cur=0;
-    while(cur+pageHPx<canvas.height){
-      const idealEnd=cur+pageHPx;
-      const fitting=_rBottomsPx.filter(b=>b>cur&&b<=idealEnd);
-      const breakAt=fitting.length>0?Math.floor(fitting[fitting.length-1]):idealEnd;
-      pageStartsPx.push(breakAt);
-      cur=breakAt;
-    }
-    pageStartsPx.forEach((startPx,i)=>{
-      if(i>0) doc.addPage();
-      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',0,-(startPx/pxPerMm),imgW,imgH);
-    });
-    doc.save(`${dd}.${mm}.${yy}_mealsheet.pdf`);
-    toast('✅ PDF তৈরি হয়েছে!');
-  }).catch(e=>{ document.body.removeChild(wrap); toast('❌ PDF তৈরিতে সমস্যা!'); console.error(e); });
+  _renderChunk(0);
   } catch(err){ toast('❌ Error: '+err.message); console.error('downloadDayPDF error:',err); }
 }
 
