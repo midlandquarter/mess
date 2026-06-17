@@ -589,7 +589,9 @@ function downloadDayPDF(){
     const mc=(m)=>{
       if(m.t==='off') return `<td style="text-align:center;color:#ccc;padding:1px 2px;font-size:9px;">—</td>`;
       const q=m.q&&m.q>1?'×'+m.q:'';
-      const c=m.t==='P'?'#1a6b3c':'#1565c0';
+      // ✅ উজ্জ্বলতা বাড়ানো: আগের #1a6b3c/#1565c0 (একটু dull) → এখন vivid green/blue
+      // size একই থাকল, শুধু রং বেশি জ্বলজ্বলে — চোখে তাড়াতাড়ি পড়বে
+      const c=m.t==='P'?'#16a34a':'#2563eb';
       return `<td style="text-align:center;font-weight:700;color:${c};padding:1px 2px;font-size:9px;">${m.t+q}</td>`;
     };
     return `
@@ -624,15 +626,15 @@ function downloadDayPDF(){
     <div style="display:flex;gap:6px;margin-bottom:7px;">
       <div style="flex:1;background:#fff8f0;border:1px solid #f0a05a;border-radius:4px;padding:3px 5px;text-align:center;">
         <div style="font-size:8px;color:#888;">Morning</div>
-        <div style="font-size:12px;font-weight:700;color:#c45000;">${totBQ}<span style="font-size:8px;font-weight:400;"> (${totBM.toFixed(2)})</span></div>
+        <div style="font-size:12px;font-weight:700;color:#ea580c;">${totBQ}<span style="font-size:8px;font-weight:400;"> (${totBM.toFixed(2)})</span></div>
       </div>
       <div style="flex:1;background:#f0fff4;border:1px solid #5abf7a;border-radius:4px;padding:3px 5px;text-align:center;">
         <div style="font-size:8px;color:#888;">Lunch</div>
-        <div style="font-size:12px;font-weight:700;color:#1a6b3c;">${totLQ}<span style="font-size:8px;font-weight:400;"> (${totLM.toFixed(2)})</span></div>
+        <div style="font-size:12px;font-weight:700;color:#16a34a;">${totLQ}<span style="font-size:8px;font-weight:400;"> (${totLM.toFixed(2)})</span></div>
       </div>
       <div style="flex:1;background:#f0f4ff;border:1px solid #5a7abf;border-radius:4px;padding:3px 5px;text-align:center;">
         <div style="font-size:8px;color:#888;">Night</div>
-        <div style="font-size:12px;font-weight:700;color:#1565c0;">${totDQ}<span style="font-size:8px;font-weight:400;"> (${totDM.toFixed(2)})</span></div>
+        <div style="font-size:12px;font-weight:700;color:#2563eb;">${totDQ}<span style="font-size:8px;font-weight:400;"> (${totDM.toFixed(2)})</span></div>
       </div>
       <div style="flex:1;background:#1a6b3c;border-radius:4px;padding:3px 5px;text-align:center;">
         <div style="font-size:8px;color:rgba(255,255,255,.75);">Total</div>
