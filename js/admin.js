@@ -603,19 +603,51 @@ function downloadDayPDF(){
 
   // sorted-কে দুই ভাগ: বাম অর্ধেক + ডান অর্ধেক
   const _half=Math.ceil(sorted.length/2);
-  let rows='';
+  const rowHtmlArr=[];
   for(let i=0;i<_half;i++){
     const uL=sorted[i], uR=sorted[i+_half]; // uR undefined হতে পারে শেষ row-এ
     const bg=i%2===0?'#f5f9f5':'#ffffff';
-    rows+=`<tr style="background:${bg};border-top:1px solid #e8f0eb;">
+    rowHtmlArr.push(`<tr style="background:${bg};border-top:1px solid #e8f0eb;">
       ${_mCells(uL)}
       <td style="width:6px;background:#c4d9c4;padding:0;"></td>
       ${_mCells(uR)}
-    </tr>`;
+    </tr>`);
   }
 
-  const html=`<div style="font-family:Arial,sans-serif;background:#fff;padding:8px 12px;width:720px;color:#1a2e22;">
-
+  const WRAP_W=720;
+  const _thead=`<thead>
+    <tr style="background:#1a6b3c;color:#fff;font-size:9px;">
+      <!-- বাম কলাম header -->
+      <th style="padding:3px 3px;text-align:left;width:48px;">ID</th>
+      <th style="padding:3px 3px;text-align:left;width:130px;">নাম</th>
+      <th style="padding:3px 4px;text-align:right;width:40px;">Total</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">সকাল</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">দুপুর</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">রাত</th>
+      <!-- মাঝের separator -->
+      <th style="width:6px;background:#0f4526;padding:0;"></th>
+      <!-- ডান কলাম header -->
+      <th style="padding:3px 3px;text-align:left;width:48px;">ID</th>
+      <th style="padding:3px 3px;text-align:left;width:130px;">নাম</th>
+      <th style="padding:3px 4px;text-align:right;width:40px;">Total</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">সকাল</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">দুপুর</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">রাত</th>
+    </tr>
+  </thead>`;
+  const _tfoot=`<tfoot>
+    <!-- Grand Total: বাম দিকে count, ডান দিকে মোট -->
+    <tr style="background:#0f4526;color:#fff;font-weight:700;font-size:9px;">
+      <td colspan="2" style="padding:3px 4px;">Grand Total</td>
+      <td style="padding:3px 4px;text-align:right;color:#fcd34d;">${grandTotal}</td>
+      <td style="padding:3px 2px;text-align:center;">${totBQ}(${totBM.toFixed(2)})</td>
+      <td style="padding:3px 2px;text-align:center;">${totLQ}(${totLM.toFixed(2)})</td>
+      <td style="padding:3px 2px;text-align:center;">${totDQ}(${totDM.toFixed(2)})</td>
+      <td style="background:#0a3520;padding:0;"></td>
+      <td colspan="6" style="padding:3px 4px;text-align:center;font-size:8px;color:rgba(255,255,255,.7);">P=Plant · Q=Quarter · off=— · Generated: ${dd}.${mm}.20${yy}</td>
+    </tr>
+  </tfoot>`;
+  const _header=`
     <!-- Header: title + date -->
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a6b3c;padding-bottom:5px;margin-bottom:7px;">
       <div style="font-size:13px;font-weight:700;color:#1a6b3c;">Daily Meal Sheet</div>
@@ -640,75 +672,81 @@ function downloadDayPDF(){
         <div style="font-size:8px;color:rgba(255,255,255,.75);">Total</div>
         <div style="font-size:12px;font-weight:700;color:#fff;">${grandTotal}</div>
       </div>
-    </div>
+    </div>`;
 
-    <!-- দুই কলামের table -->
-    <table style="width:100%;border-collapse:collapse;">
-      <thead>
-        <tr style="background:#1a6b3c;color:#fff;font-size:9px;">
-          <!-- বাম কলাম header -->
-          <th style="padding:3px 3px;text-align:left;width:48px;">ID</th>
-          <th style="padding:3px 3px;text-align:left;width:130px;">নাম</th>
-          <th style="padding:3px 4px;text-align:right;width:40px;">Total</th>
-          <th style="padding:3px 2px;text-align:center;width:38px;">সকাল</th>
-          <th style="padding:3px 2px;text-align:center;width:38px;">দুপুর</th>
-          <th style="padding:3px 2px;text-align:center;width:38px;">রাত</th>
-          <!-- মাঝের separator -->
-          <th style="width:6px;background:#0f4526;padding:0;"></th>
-          <!-- ডান কলাম header -->
-          <th style="padding:3px 3px;text-align:left;width:48px;">ID</th>
-          <th style="padding:3px 3px;text-align:left;width:130px;">নাম</th>
-          <th style="padding:3px 4px;text-align:right;width:40px;">Total</th>
-          <th style="padding:3px 2px;text-align:center;width:38px;">সকাল</th>
-          <th style="padding:3px 2px;text-align:center;width:38px;">দুপুর</th>
-          <th style="padding:3px 2px;text-align:center;width:38px;">রাত</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <!-- Grand Total: বাম দিকে count, ডান দিকে মোট -->
-        <tr style="background:#0f4526;color:#fff;font-weight:700;font-size:9px;">
-          <td colspan="2" style="padding:3px 4px;">Grand Total</td>
-          <td style="padding:3px 4px;text-align:right;color:#fcd34d;">${grandTotal}</td>
-          <td style="padding:3px 2px;text-align:center;">${totBQ}(${totBM.toFixed(2)})</td>
-          <td style="padding:3px 2px;text-align:center;">${totLQ}(${totLM.toFixed(2)})</td>
-          <td style="padding:3px 2px;text-align:center;">${totDQ}(${totDM.toFixed(2)})</td>
-          <td style="background:#0a3520;padding:0;"></td>
-          <td colspan="6" style="padding:3px 4px;text-align:center;font-size:8px;color:rgba(255,255,255,.7);">P=Plant · Q=Quarter · off=— · Generated: ${dd}.${mm}.20${yy}</td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>`;
+  // ✅ প্রতিটা page-এর HTML বানানোর reusable function — header+thead সব
+  // page-এ repeat হয়, tfoot শুধু শেষ page-এ। rowSlice = এই page-এ যেই rows যাবে।
+  function _buildPage(rowSlice,isLast){
+    return `<div style="font-family:Arial,sans-serif;background:#fff;padding:8px 12px;width:${WRAP_W}px;color:#1a2e22;">
+      ${_header}
+      <table style="width:100%;border-collapse:collapse;">
+        ${_thead}<tbody>${rowSlice.join('')}</tbody>${isLast?_tfoot:''}
+      </table>
+    </div>`;
+  }
 
-  // Single render — ২ কলামে ৩০ row → এক পেজে fit করে
-  // (member ১০০+ হলে overflow → নিচের fallback handle করবে)
-  const wrap=document.createElement('div');
-  wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
-  wrap.innerHTML=html;
-  document.body.appendChild(wrap);
-  toast('⏳ PDF তৈরি হচ্ছে...');
-  html2canvas(wrap.firstChild,{scale:2,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
-    document.body.removeChild(wrap);
-    const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const imgW=210, imgH=(canvas.height*imgW)/canvas.width;
-    const pxPerMm=canvas.width/imgW;
-    if(imgH<=300){
-      // এক পেজেই fit — সরাসরি রাখো
-      doc.addImage(canvas.toDataURL('image/jpeg',0.88),'JPEG',0,0,imgW,imgH);
-    } else {
-      // Overflow fallback: পেজ ভাগ করো (row split হওয়ার chance নেই কারণ 2-col layout-এ ১০০+ member লাগবে)
-      const pageHPx=Math.floor(300*pxPerMm);
-      let start=0;
-      while(start<canvas.height){
-        if(start>0) doc.addPage();
-        doc.addImage(canvas.toDataURL('image/jpeg',0.88),'JPEG',0,-(start/pxPerMm),imgW,imgH);
-        start+=pageHPx;
-      }
+  // ✅ Step 1: পুরো table একবার off-screen বানিয়ে আসল row height measure করো।
+  // হাতে-হিসাব করা সংখ্যা না — সরাসরি DOM থেকে মাপ নেওয়া হচ্ছে, তাই member
+  // সংখ্যা ৬০ হোক বা ১২০ বা তার বেশি, হিসাব নিজে থেকেই ঠিক থাকবে।
+  const _measureWrap=document.createElement('div');
+  _measureWrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
+  _measureWrap.innerHTML=_buildPage(rowHtmlArr,true);
+  document.body.appendChild(_measureWrap);
+  void _measureWrap.offsetHeight; // layout flush নিশ্চিত করো
+
+  const _trEls=Array.from(_measureWrap.querySelectorAll('tbody tr'));
+  const _tfootEl=_measureWrap.querySelector('tfoot');
+  const rowTop=_trEls.map(r=>r.offsetTop);
+  const rowBot=_trEls.map(r=>r.offsetTop+r.offsetHeight);
+  const overheadPx=rowTop.length?rowTop[0]:0; // header+summary+thead-এর উচ্চতা
+  const tfootPx=_tfootEl?_tfootEl.offsetHeight:0;
+  document.body.removeChild(_measureWrap);
+
+  // mm↔px সম্পর্ক: wrap-এর CSS width-ই PDF-এ 210mm হয়ে যায় (html2canvas-এর
+  // scale যাই হোক, addImage-এ canvas.width থেকে এটা বাতিল হয়ে যায়)।
+  const imgW=210;
+  const mmPerCssPx=imgW/WRAP_W;
+  const SAFE_PAGE_MM=290; // 297mm-এর নিচে কিছু safety margin
+  const maxPageCssPx=SAFE_PAGE_MM/mmPerCssPx;
+  // প্রতি page-এ header+thead repeat হবে, এবং কোনটা শেষ page হবে আগে জানা
+  // নেই — তাই সবসময় tfoot-এর জায়গাও reserve রাখা হলো (নিরাপদ পদ্ধতি)।
+  const rowBudgetPx=maxPageCssPx-overheadPx-tfootPx;
+
+  // ✅ Step 2: measured উচ্চতা দিয়ে precise chunk বানাও — কোনো row মাঝখানে কাটবে না
+  const chunks=[];
+  let chunkStart=0;
+  for(let i=0;i<_trEls.length;i++){
+    const usedByChunk=rowBot[i]-rowTop[chunkStart];
+    if(usedByChunk>rowBudgetPx && i>chunkStart){
+      chunks.push([chunkStart,i-1]);
+      chunkStart=i;
     }
-    doc.save(`${dd}.${mm}.${yy}_mealsheet.pdf`);
-    toast('✅ PDF তৈরি হয়েছে!');
-  }).catch(e=>{ document.body.removeChild(wrap); toast('❌ PDF তৈরিতে সমস্যা!'); console.error(e); });
+  }
+  if(_trEls.length>0) chunks.push([chunkStart,_trEls.length-1]);
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+
+  // ✅ Step 3: প্রতিটা chunk আলাদাভাবে render + আলাদা PDF page — একটা বড় canvas
+  // কেটে ভাগ করা হচ্ছে না, তাই কোনো row দুই page-এ ভাগ হওয়ার সুযোগ নেই।
+  toast('⏳ PDF তৈরি হচ্ছে...');
+  function _renderChunk(idx){
+    if(idx>=chunks.length){ doc.save(`${dd}.${mm}.${yy}_mealsheet.pdf`); toast('✅ PDF তৈরি হয়েছে!'); return; }
+    const [s,e]=chunks[idx];
+    const isLast=(idx===chunks.length-1);
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
+    wrap.innerHTML=_buildPage(rowHtmlArr.slice(s,e+1),isLast);
+    document.body.appendChild(wrap);
+    html2canvas(wrap.firstChild,{scale:2,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
+      document.body.removeChild(wrap);
+      if(idx>0) doc.addPage();
+      const imgH=(canvas.height*imgW)/canvas.width;
+      doc.addImage(canvas.toDataURL('image/jpeg',0.88),'JPEG',0,0,imgW,imgH);
+      _renderChunk(idx+1);
+    }).catch(e=>{ document.body.removeChild(wrap); toast('❌ PDF তৈরিতে সমস্যা!'); console.error(e); });
+  }
+  _renderChunk(0);
   } catch(err){ toast('❌ Error: '+err.message); console.error('downloadDayPDF error:',err); }
 }
 
