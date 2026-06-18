@@ -596,7 +596,7 @@ function downloadDayPDF(){
     };
     return `
       <td style="padding:1px 3px;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;">${String(u.job||u.u).substring(0,8)}</td>
-      <td style="padding:1px 3px;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;">${(u.name||'').substring(0,22)}</td>
+      <td style="padding:1px 3px;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:145px;">${(u.name||'').substring(0,40)}</td>
       <td style="text-align:right;padding:1px 4px;font-size:9px;font-weight:700;color:${isOff?'#ccc':'#1a2e22'};">${isOff?'—':tot.toFixed(2)}</td>
       ${mc(bm)}${mc(lm)}${mc(dm)}`;
   }
