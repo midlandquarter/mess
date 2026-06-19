@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════════
+# .github/workflows/notify-deposit.yml
+# ─────────────────────────────────────────────────────────────────
+# প্রতি মাসের ১১ তারিখ দুপুর ১২টায় টাকা জমার কথা মনে করিয়ে দেবে।
+# মেস মাস ১১ তারিখে শুরু হয়, তাই সেদিনই reminder পাঠানো হচ্ছে।
+#
+# Bangladesh = UTC+6
+# দুপুর ১২:০০ BD = UTC 06:00
+# ═══════════════════════════════════════════════════════════════════
+
+name: Monthly Deposit Reminder (প্রতি মাসের ১১ তারিখ)
+
+on:
+  schedule:
+    # প্রতি মাসের ১১ তারিখ, দুপুর ১২:০০ Bangladesh (= UTC 06:00)
+    - cron: '0 6 11 * *'
+  workflow_dispatch:
+
+jobs:
+  send-notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase Admin SDK
+        run: npm install firebase-admin
+
+      - name: Send deposit reminder notification
+        run: |
+          node .github/workflows/send_fcm.js \
+            "💰 টাকা জমা দিন" \
+            "নতুন মেস মাস শুরু হয়েছে। নিয়ম অনুযায়ী টাকা জমা দিন।" \
+            "https://midlandquarter.github.io/mess/"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
