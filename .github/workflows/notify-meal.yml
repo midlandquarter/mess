@@ -38,6 +38,7 @@ jobs:
         run: |
           node .github/workflows/send_fcm.js \
             "🍽️ মিল আপডেট করুন" \
-            "রাত ৮টা বাজে। আজকের মিল এখনো update করেননি হলে এখনই করুন!"
+            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          
