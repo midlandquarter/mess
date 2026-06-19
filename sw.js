@@ -1,3 +1,61 @@
+// ═══════════════════════════════════════════════════════════════════
+// Firebase Messaging — Background Push Notification
+// ─────────────────────────────────────────────────────────────────
+// কেন: Browser app বন্ধ থাকলেও FCM-এর push পৌঁছালে এই SW এটা
+// ধরে notification দেখায়। App খোলা থাকলে push.js-এর onMessage()
+// handle করে।
+// ═══════════════════════════════════════════════════════════════════
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+
+// SW-এ Firebase আলাদাভাবে init করতে হয় (config.js এখানে চলে না)
+if (!firebase.apps.length) {
+  firebase.initializeApp({
+    apiKey: 'AIzaSyDBR9Z3gnk0oHBRyqC5eOcGhu8ONa8Up-U',
+    authDomain: 'midlandquarter-19623.firebaseapp.com',
+    databaseURL: 'https://midlandquarter-19623-default-rtdb.firebaseio.com',
+    projectId: 'midlandquarter-19623',
+    storageBucket: 'midlandquarter-19623.firebasestorage.app',
+    messagingSenderId: '370339958840',
+    appId: '1:370339958840:web:dc81e43f4f584d1b1956cd'
+  });
+}
+
+const messaging = firebase.messaging();
+
+// Background message handler:
+// FCM payload-এ 'notification' field থাকলে এই callback call হয় না —
+// FCM SDK নিজেই notification দেখায়।
+// শুধু 'data'-only payload-এর জন্য এটা দরকার।
+messaging.onBackgroundMessage(payload => {
+  const title = payload.notification?.title || payload.data?.title || 'মেস নোটিফিকেশন';
+  const body  = payload.notification?.body  || payload.data?.body  || '';
+  return self.registration.showNotification(title, {
+    body,
+    icon : '/mess/icon-192.png',
+    badge: '/mess/icon-192.png',
+    vibrate: [200, 100, 200],
+    data: { url: payload.data?.url || 'https://midlandquarter.github.io/mess/' }
+  });
+});
+
+// Notification-এ tap করলে app খুলবে
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = event.notification.data?.url || 'https://midlandquarter.github.io/mess/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      // App ইতিমধ্যে খোলা থাকলে focus করো
+      const existing = list.find(c => c.url.includes('/mess/'));
+      if (existing) return existing.focus();
+      // না থাকলে নতুন tab খোলো
+      return clients.openWindow(target);
+    })
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────
+
 const CACHE_VERSION = 'mq-v11';
 
 const SHELL_ASSETS = [
