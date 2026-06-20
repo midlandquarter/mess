@@ -13,7 +13,7 @@
 //     "Generate key pair" থেকে পাওয়া Public key এখানে বসাও।
 // ═══════════════════════════════════════════════════════════════════
 
-const VAPID_KEY = 'BN5I0AJqbVGfhQnedAKjHcwUojZMEdszieqwvQnucvWI6t5VBmxXNNW4OgPpVqbuLOAase6BP9kuRnqP14i4_Yo';
+const VAPID_KEY = 'BBMjg0ezmZK00Vy0jiK2DpZcgBdK-vmMqD8UiWXDcWjvpm_Q67eEkG2JwpWxmKSqyOtNYOfCSgWamf5GmttUiho';
 // ↑ Firebase Console → Project Settings → Cloud Messaging →
 //   Web Push certificates → Key pair (copy the public key)
 
