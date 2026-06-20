@@ -46,19 +46,25 @@ async function sendNotifications() {
   const messaging = admin.messaging();
 
   // RTDB থেকে সব push tokens পড়ো
-  // structure: pushTokens/{uid} = "fcm_token_string"
-  const snap = await db.ref('pushTokens').once('value');
+  // path: users/{uid}/pushToken (push.js সেখানে save করে)
+  const snap = await db.ref('users').once('value');
 
   if (!snap.exists()) {
-    console.log('ℹ️  কোনো registered token নেই। কেউ এখনো notification allow করেনি।');
+    console.log('ℹ️  কোনো registered token নেই।');
     process.exit(0);
   }
 
-  // uid → token map বানাও (invalid token মুছতে uid দরকার)
+  // uid → token map বানাও — pushToken field আছে এমন users শুধু নাও
   const tokenMap = {}; // { uid: token }
   snap.forEach(child => {
-    if (child.val()) tokenMap[child.key] = child.val();
+    const token = child.val()?.pushToken;
+    if (token) tokenMap[child.key] = token;
   });
+
+  if (Object.keys(tokenMap).length === 0) {
+    console.log('ℹ️  কোনো device-এ pushToken নেই। App-এ notification allow করুন।');
+    process.exit(0);
+  }
 
   const uids   = Object.keys(tokenMap);
   const tokens = Object.values(tokenMap);
@@ -102,7 +108,7 @@ async function sendNotifications() {
         errCode.includes('invalid-argument');
       if (isInvalid) {
         console.log(`🗑️  Removing invalid token for uid: ${uids[i]}`);
-        toRemove['pushTokens/' + uids[i]] = null;
+        toRemove['users/' + uids[i] + '/pushToken'] = null;
       } else {
         console.warn(`⚠️  Send failed for uid ${uids[i]}:`, result.reason?.message || result.reason);
       }
@@ -122,4 +128,3 @@ sendNotifications().catch(err => {
   console.error('❌ Fatal error:', err);
   process.exit(1);
 });
-  
