@@ -69,8 +69,16 @@ async function _registerPush(user) {
 
     // Firebase RTDB-তে সেভ করো: pushTokens/{uid} = "token_string"
     // GitHub Action এই path থেকে সব tokens পড়বে
-    await firebase.database().ref('pushTokens/' + user.uid).set(token);
+    // users/{uid}/pushToken path-এ save করো —
+    // Firebase RTDB rules এই path-এ authenticated user-এর write allow করে।
+    // আগে pushTokens/{uid} ছিল যেটা rules-এ cover ছিল না।
+    await firebase.database().ref('users/' + user.uid + '/pushToken').set(token);
     console.log('[Push] Token saved ✅');
+
+    // User-কে জানাও (toast function app-এ globally available)
+    if (typeof toast === 'function') {
+      toast('🔔 Notification চালু হয়েছে!');
+    }
 
     // Foreground message handler:
     // App খোলা থাকলে FCM SDK notification দেখায় না — আমাদেরই handle করতে হয়
@@ -92,6 +100,10 @@ async function _registerPush(user) {
 
   } catch (err) {
     console.warn('[Push] Registration error:', err);
+    // Error user-কে দেখাও যাতে বুঝতে পারে কী হয়েছে
+    if (typeof toast === 'function') {
+      toast('⚠️ Notification setup-এ সমস্যা: ' + (err.message || err));
+    }
   }
 }
 
