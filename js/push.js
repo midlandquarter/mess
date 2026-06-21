@@ -67,17 +67,26 @@ async function _registerPush(user) {
       return;
     }
 
-    // Firebase RTDB-তে সেভ করো: pushTokens/{uid} = "token_string"
-    // GitHub Action এই path থেকে সব tokens পড়বে
-    // users/{uid}/pushToken path-এ save করো —
-    // Firebase RTDB rules এই path-এ authenticated user-এর write allow করে।
-    // আগে pushTokens/{uid} ছিল যেটা rules-এ cover ছিল না।
+    // ✅ FIX: আগের token-এর সাথে compare করো।
+    // একই token থাকলে চুপ থাকো — toast বা RTDB write করো না।
+    // এই check না থাকলে প্রতিবার app খুললে toast দেখায়।
+    const existingSnap = await firebase.database()
+      .ref('users/' + user.uid + '/pushToken').once('value');
+    const existingToken = existingSnap.val();
+
+    if (token === existingToken) {
+      // Token অপরিবর্তিত — কিছু করার নেই
+      console.log('[Push] Token unchanged ✓');
+      return;
+    }
+
+    // নতুন বা পরিবর্তিত token — RTDB-তে save করো
     await firebase.database().ref('users/' + user.uid + '/pushToken').set(token);
     console.log('[Push] Token saved ✅');
 
-    // User-কে জানাও (toast function app-এ globally available)
+    // শুধু প্রথমবার (token নতুন হলে) toast দেখাও
     if (typeof toast === 'function') {
-      toast('🔔 Notification চালু হয়েছে!');
+      toast('🔔 Notification চালু হয়েছে!'); // typo fix: হেয়েছে → হয়েছে
     }
 
     // Foreground message handler:
@@ -85,25 +94,16 @@ async function _registerPush(user) {
     messaging.onMessage(payload => {
       const title = payload.notification?.title || 'মেস নোটিফিকেশন';
       const body  = payload.notification?.body  || '';
-      // App-এর নিজস্ব toast function থাকলে সেটা ব্যবহার করো
       if (typeof toast === 'function') {
         toast('🔔 ' + title + (body ? ' — ' + body : ''));
       }
-      // Browser notification-ও দেখাও (foreground)
       if (Notification.permission === 'granted') {
-        new Notification(title, {
-          body,
-          icon: '/mess/icon-192.png'
-        });
+        new Notification(title, { body, icon: '/mess/icon-192.png' });
       }
     });
 
   } catch (err) {
     console.warn('[Push] Registration error:', err);
-    // Error user-কে দেখাও যাতে বুঝতে পারে কী হয়েছে
-    if (typeof toast === 'function') {
-      toast('⚠️ Notification setup-এ সমস্যা: ' + (err.message || err));
-    }
   }
 }
 
