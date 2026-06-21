@@ -35,26 +35,49 @@ try {
   process.exit(1);
 }
 
+// ✅ FIX: private_key-এ literal newlines থাকলে \n দিয়ে replace করো
+// GitHub Secrets-এ paste করার সময় এটা corrupt হয়ে যায়
+if (serviceAccount.private_key) {
+  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+}
+
+// databaseURL সরাসরি project_id থেকে বের করো (hardcode না)
+const projectId = serviceAccount.project_id;
+if (!projectId) {
+  console.error('❌ project_id not found in service account JSON.');
+  process.exit(1);
+}
+const databaseURL = `https://${projectId}-default-rtdb.firebaseio.com`;
+console.log(`📡 Project: ${projectId}`);
+
 // Firebase Admin initialize
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://midlandquarter-19623-default-rtdb.firebaseio.com'
+  databaseURL
 });
 
 async function sendNotifications() {
   const db = admin.database();
   const messaging = admin.messaging();
 
+  // ✅ FIX: 30s timeout — auth error হলে আর 6h hang করবে না
+  const _timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('⏱️ Timeout: Firebase 30s-এ respond করেনি। Service account চেক করুন।')), 30000)
+  );
+
   // RTDB থেকে সব push tokens পড়ো
-  // path: users/{uid}/pushToken (push.js সেখানে save করে)
-  const snap = await db.ref('users').once('value');
+  // path: users/{uid}/pushToken (push.js এখানে save করে)
+  const snap = await Promise.race([
+    db.ref('users').once('value'),
+    _timeout
+  ]);
 
   if (!snap.exists()) {
     console.log('ℹ️  কোনো registered token নেই।');
     process.exit(0);
   }
 
-  // uid → token map বানাও — pushToken field আছে এমন users শুধু নাও
+  // uid → token map বানাও — শুধু pushToken field আছে এমন users নাও
   const tokenMap = {}; // { uid: token }
   snap.forEach(child => {
     const token = child.val()?.pushToken;
@@ -62,7 +85,7 @@ async function sendNotifications() {
   });
 
   if (Object.keys(tokenMap).length === 0) {
-    console.log('ℹ️  কোনো device-এ pushToken নেই। App-এ notification allow করুন।');
+    console.log('ℹ️  কোনো device-এ pushToken নেই।');
     process.exit(0);
   }
 
@@ -128,3 +151,4 @@ sendNotifications().catch(err => {
   console.error('❌ Fatal error:', err);
   process.exit(1);
 });
+      
