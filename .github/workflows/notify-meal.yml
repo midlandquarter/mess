@@ -21,6 +21,7 @@ on:
 jobs:
   send-notification:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # auth error হলে 6h hang না করে 5 min-এ বন্ধ হবে
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
