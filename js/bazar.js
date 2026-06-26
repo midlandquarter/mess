@@ -125,13 +125,19 @@ function delBazar(id){
 }
 function editBazar(id){
   const b=DB.bazar.find(x=>x.id===id); if(!b) return;
+  // ✅ FIX BUG-03: item-এর mess month-এর bounds বের করো এবং modal-এ enforce করো।
+  // Bug: edit modal-এ date input-এ কোনো min/max ছিল না।
+  // Date অন্য mess month-এ দিলে: item current bucket-এ থাকে কিন্তু নতুন date-এ
+  // dateInMessMonth() fail → কোনো month-এই দেখা যায় না → entry হারিয়ে যায়।
+  const itemMmKey=messMonthKey(new Date(b.date+'T12:00:00'));
+  const {minDate,maxDate}=getMessCycleBounds(itemMmKey);
   const html=`<div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">বিবরণ</label>
     <input id="edit-bz-desc" class="form-input" value="${esc(b.desc)}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">পরিমাণ ৳</label>
     <input id="edit-bz-amt" type="number" class="form-input" value="${b.amount}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">তারিখ</label>
-    <input id="edit-bz-date" type="date" class="form-input" value="${esc(b.date)}" style="margin-top:4px"></div>
+    <input id="edit-bz-date" type="date" class="form-input" value="${esc(b.date)}" min="${minDate}" max="${maxDate}" style="margin-top:4px"></div>
   </div>`;
   showModal('বাজার সম্পাদনা', html, ()=>{
     const desc=sanitizeInput(document.getElementById('edit-bz-desc').value);
@@ -140,6 +146,8 @@ function editBazar(id){
     if(!desc||desc.length<2){ toast('❌ বিবরণ দিন!'); return; }
     if(!validAmount(amount)){ toast('❌ সঠিক পরিমাণ দিন!'); return; }
     if(!date){ toast('❌ তারিখ দিন!'); return; }
+    // ✅ server-side validation: input bypass হলেও ধরা পড়বে
+    if(date<minDate||date>maxDate){ toast('❌ তারিখ এই মেস মাসের বাইরে দেওয়া যাবে না!'); return; }
     b.desc=desc; b.amount=amount; b.date=date;
     saveBazarItem(b); renderBazar(); closeModal(); toast('✅ আপডেট হয়েছে!');
   }, true);

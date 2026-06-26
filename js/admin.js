@@ -225,16 +225,21 @@ function doMonthHandover(){
 
       // ── Step 2: rows পেলে prevBalances সেট ও saveGlobal ──
       // saveDB() না, saveGlobal() — month data ছোঁব না
+      // ✅ FIX BUG-12: beforeCount async load শুরুর আগে capture করো।
+      // আগে: beforeCount _applyHandover-এর ভেতরে ছিল — async load-এর পরে capture হত,
+      // তাই load চলাকালীন user list পরিবর্তন detect করতে পারত না।
+      const beforeCount = DB.users.length;
       const _applyHandover = (rows) => {
-        const beforeCount = DB.users.length;
-        const nextKey = nextCycleKey(mmKey);
-        if(!DB.prevBalances) DB.prevBalances = {};
-        if(!DB.prevBalances[nextKey]) DB.prevBalances[nextKey] = {};
-        rows.forEach(({u, netBal}) => { DB.prevBalances[nextKey][u.u] = netBal; });
+        // ✅ FIX BUG-12: guard check prevBalances modify করার আগে।
+        // আগে: prevBalances modify → তারপর guard check → return করলেও data আধা-modified থাকত।
         if(DB.users.length !== beforeCount){
           toast('❌ ত্রুটি: user list পরিবর্তন হয়ে গেছে! Handover বাতিল।');
           return;
         }
+        const nextKey = nextCycleKey(mmKey);
+        if(!DB.prevBalances) DB.prevBalances = {};
+        if(!DB.prevBalances[nextKey]) DB.prevBalances[nextKey] = {};
+        rows.forEach(({u, netBal}) => { DB.prevBalances[nextKey][u.u] = netBal; });
         if(!DB.handoverDone) DB.handoverDone = [];
         DB.handoverDone.push(mmKey);
         saveHandover(); // ✅ controller-only Firebase path — saveGlobal() বাদ
@@ -254,9 +259,19 @@ function doMonthHandover(){
         _applyHandover(rows);
       };
 
-      // Current month হলে DB-তেই আছে, সরাসরি calculate করো
+      // ✅ FIX BUG-04: Current month-এও Firebase থেকে fresh data নাও।
+      // আগে: local DB দিয়ে সরাসরি calculate করত।
+      // সমস্যা: অন্য browser-এ কেউ একই সময়ে bazar/transaction যোগ করলে
+      // local DB সেটা জানত না → handover calculation-এ miss → পরের মাসের prevBalance ভুল।
       if(mmKey === currentMonthKey){
-        _applyHandover(_calcHandoverData(mmKey));
+        toast('⏳ সর্বশেষ ডেটা লোড হচ্ছে...');
+        monthsRef.child(mmKey).once('value').then(snap=>{
+          const hist=snap.val()||{};
+          _calcWithHist(hist);
+        }).catch(e=>{
+          toast('❌ ডেটা লোড ব্যর্থ! আবার চেষ্টা করুন।');
+          console.error('Handover current month load error:', e);
+        });
         return;
       }
 
@@ -456,7 +471,20 @@ function deleteMember(){
   if(!isOnline()){ noNetPopup(); return; }
   const uname=document.getElementById('del-mem-sel').value; if(!uname){ toast('❌ সদস্য নির্বাচন করুন!'); return; }
   const u=DB.users.find(x=>x.u===uname);
-  showModal('সদস্য মুছুন',`${u?.name||uname} কে স্থায়ীভাবে মুছে ফেলবেন? সব ডেটা হারিয়ে যাবে!`,()=>{
+
+  // ✅ FIX BUG-05: মুছে দেওয়ার আগে balance check।
+  // সমস্যা: outstanding balance সহ member delete করলে handover-এ তার balance
+  // আর দেখা যায় না — DB.users-এ নেই তাই _calcHandoverData() miss করে।
+  // সমাধান: balance থাকলে manager-কে সতর্ক করো, সে সচেতনভাবে সিদ্ধান্ত নিক।
+  const mmKey=messMonthKey();
+  const _dep=(DB.transactions||[]).filter(tx=>tx.uname===uname&&tx.type==='deposit'&&dateInMessMonth(tx.date,mmKey)).reduce((s,tx)=>s+(tx.amount||0),0);
+  const _with=(DB.transactions||[]).filter(tx=>tx.uname===uname&&tx.type==='withdraw'&&dateInMessMonth(tx.date,mmKey)).reduce((s,tx)=>s+(tx.amount||0),0);
+  const bal=getPreBal(uname,mmKey)+(_dep-_with);
+  const balWarn=bal!==0
+    ? `\n\n⚠️ সতর্কতা: এই সদস্যের বর্তমান ব্যালেন্স ৳${Math.abs(bal).toFixed(2)} (${bal>0?'জমা আছে':'বকেয়া আছে'})। মুছে ফেললে এই হিসাব হারিয়ে যাবে!`
+    : '';
+
+  showModal('সদস্য মুছুন',`${u?.name||uname} কে স্থায়ীভাবে মুছে ফেলবেন? সব ডেটা হারিয়ে যাবে!${balWarn}`,()=>{
     // ✅ FIX: RTDB cleanup-এর জন্য uid আগেই নাও — DB.users filter করার পরে u হারিয়ে যাবে
     const targetUid = u?.uid;
     DB.users=DB.users.filter(x=>x.u!==uname);

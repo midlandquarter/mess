@@ -261,6 +261,10 @@ function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return
 function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('others').child(String(id)).remove().catch(e=>console.error('OthersDel:',e)); }
 function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
 function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
+// ✅ FIX BUG-01: এই দুটো function office-meal.js-এ ৬+ বার call হয় কিন্তু কোথাও define ছিল না।
+// ফলে প্রতিটি Office Meal note save/delete/edit-এ ReferenceError crash হত।
+function saveOfficeMealNoteItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>console.error('OfficeMealNote:',e)); }
+function deleteOfficeMealNoteItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>console.error('OfficeMealNoteDel:',e)); }
 
 // ── Pending Approval helpers ────────────────────────────────────────────────
 // Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
@@ -740,7 +744,16 @@ function loadDB(){
         const data=snap.val(); if(!data) return;
         const ARR=['bazar','others','transactions','officeMealNotes','cookBills'];
         ARR.forEach(f=>{
-          if(data[f]!==undefined) DB[f]=_ensureArr(data[f]).sort((a,b)=>(a.id||0)-(b.id||0));
+          if(data[f]===undefined) return;
+          const fromFB=_ensureArr(data[f]).sort((a,b)=>(a.id||0)-(b.id||0));
+          // ✅ FIX BUG-10: replace-এর বদলে merge করো।
+          // Bug: Tab foreground-এ ফিরলে এই function চলত এবং DB[f] সম্পূর্ণ replace করত।
+          // যদি এর আগে local push হয়েছে কিন্তু Firebase-এ এখনো পৌঁছায়নি (in-flight),
+          // তাহলে সেই item Firebase snapshot-এ থাকত না → overwrite → item হারিয়ে যেত।
+          // Fix: Firebase-এ নেই কিন্তু local-এ আছে এমন items (in-flight) রেখে দাও।
+          const fbIds=new Set(fromFB.map(x=>x.id).filter(Boolean));
+          const localOnly=(DB[f]||[]).filter(x=>x.id&&!fbIds.has(x.id));
+          DB[f]=[...fromFB,...localOnly].sort((a,b)=>(a.id||0)-(b.id||0));
         });
         // mealRates, managers etc (non-meal fields, excluding meals)
         ['managers','officeMealRates'].forEach(f=>{
@@ -755,8 +768,19 @@ function loadDB(){
       if(!_dbLoaded){
         _dbLoaded=true;
         hideSplash();
-        if(CU){ refreshHome(); showSc('home'); } else { showSc('login'); }
-        toast('⚠️ সংযোগ ধীর। পুনরায় চেষ্টা করুন।');
+        // ✅ FIX BUG-13: DB.users খালি থাকলে home দেখানো বিপজ্জনক।
+        // User interaction করলে empty DB-তে save হতে পারে।
+        // আলাদা warning দাও এবং refreshHome() call করো না।
+        if(CU && DB.users.length===0){
+          showSc('home');
+          toast('⚠️ ডেটা লোড অসম্পূর্ণ। পেজ রিফ্রেশ করুন।');
+          console.warn('[loadDB] 10s timeout: DB.users empty — user interactions restricted.');
+        } else if(CU){
+          refreshHome(); showSc('home');
+          toast('⚠️ সংযোগ ধীর। পুনরায় চেষ্টা করুন।');
+        } else {
+          showSc('login');
+        }
       }
     }, 10000);
   }

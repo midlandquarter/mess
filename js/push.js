@@ -13,7 +13,7 @@
 //     "Generate key pair" থেকে পাওয়া Public key এখানে বসাও।
 // ═══════════════════════════════════════════════════════════════════
 
-const VAPID_KEY = 'BBMjg0ezmZK00Vy0jiK2DpZcgBdK-vmMqD8UiWXDcWjvpm_Q67eEkG2JwpWxmKSqyOtNYOfCSgWamf5GmttUiho';
+const VAPID_KEY = 'BN5I0AJqbVGfhQnedAKjHcwUojZMEdszieqwvQnucvWI6t5VBmxXNNW4OgPpVqbuLOAase6BP9kuRnqP14i4_Yo';
 // ↑ Firebase Console → Project Settings → Cloud Messaging →
 //   Web Push certificates → Key pair (copy the public key)
 
@@ -67,26 +67,31 @@ async function _registerPush(user) {
       return;
     }
 
-    // ✅ FIX: আগের token-এর সাথে compare করো।
-    // একই token থাকলে চুপ থাকো — toast বা RTDB write করো না।
-    // এই check না থাকলে প্রতিবার app খুললে toast দেখায়।
-    const existingSnap = await firebase.database()
-      .ref('users/' + user.uid + '/pushToken').once('value');
-    const existingToken = existingSnap.val();
+    // ✅ FIX 1: Pending user-এর জন্য token save করো না।
+    // Bug: pending user-এর জন্য save করলে users/{uid} node তৈরি হয়।
+    // auth.js সেটা দেখে মনে করে user approved — কিন্তু global/users-এ নেই
+    // → "মুছে ফেলা হয়েছে" দেখাত। এখন pending থাকলে skip করো।
+    const _pendChk = await firebase.database()
+      .ref('pendingApprovals/' + user.uid).once('value');
+    if(_pendChk.exists()){
+      console.log('[Push] User still pending — token save skipped.');
+      return;
+    }
 
-    if (token === existingToken) {
-      // Token অপরিবর্তিত — কিছু করার নেই
+    // ✅ FIX 2: আগের token-এর সাথে compare — same হলে চুপ থাকো
+    const _existSnap = await firebase.database()
+      .ref('users/' + user.uid + '/pushToken').once('value');
+    if(_existSnap.val() === token){
       console.log('[Push] Token unchanged ✓');
       return;
     }
 
-    // নতুন বা পরিবর্তিত token — RTDB-তে save করো
+    // নতুন / পরিবর্তিত token — সঠিক path-এ save করো
     await firebase.database().ref('users/' + user.uid + '/pushToken').set(token);
     console.log('[Push] Token saved ✅');
 
-    // শুধু প্রথমবার (token নতুন হলে) toast দেখাও
-    if (typeof toast === 'function') {
-      toast('🔔 Notification চালু হয়েছে!'); // typo fix: হেয়েছে → হয়েছে
+    if(typeof toast === 'function'){
+      toast('🔔 Notification চালু হয়েছে!');
     }
 
     // Foreground message handler:
@@ -94,11 +99,16 @@ async function _registerPush(user) {
     messaging.onMessage(payload => {
       const title = payload.notification?.title || 'মেস নোটিফিকেশন';
       const body  = payload.notification?.body  || '';
+      // App-এর নিজস্ব toast function থাকলে সেটা ব্যবহার করো
       if (typeof toast === 'function') {
         toast('🔔 ' + title + (body ? ' — ' + body : ''));
       }
+      // Browser notification-ও দেখাও (foreground)
       if (Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '/mess/icon-192.png' });
+        new Notification(title, {
+          body,
+          icon: '/mess/icon-192.png'
+        });
       }
     });
 
@@ -126,9 +136,15 @@ async function _registerPush(user) {
 
     // Auth state পরিবর্তনে token register/update করো
     firebase.auth().onAuthStateChanged(user => {
-      if (user) {
+      // ✅ FIX BUG-15: Registration চলাকালীন push initialization করো না।
+      // Bug: _registrationInProgress guard ছিল না।
+      // createUserWithEmailAndPassword() কল হলে onAuthStateChanged fire করে।
+      // তখন _registerPush() চললে Notification.requestPermission() dialog
+      // registration flow-এর মাঝখানে দেখাত — UX বিভ্রান্তিকর।
+      // _registrationInProgress auth.js-এ defined (window-scoped global)।
+      if(user && !_registrationInProgress){
         _registerPush(user).catch(e => console.warn('[Push] init error:', e));
-      } else {
+      } else if(!user) {
         // Logout হলে token সরানোর দরকার নেই — token device-এ থাকে,
         // অন্য user একই device-এ login করলে overwrite হবে
         console.log('[Push] User logged out.');

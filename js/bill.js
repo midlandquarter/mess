@@ -62,7 +62,6 @@ function loadBill(){
   document.getElementById('bl-meal-bill').textContent='৳ '+mealBillDisplay.toFixed(2);
   document.getElementById('bl-other-share').textContent='৳ '+othersShare.toFixed(2);
   document.getElementById('bl-cook-food-share').textContent='৳ '+(cookFoodShare||0).toFixed(2);
-  document.getElementById('bl-cook-food-share').textContent='৳ '+(cookFoodShare||0).toFixed(2);
   document.getElementById('bl-cook-share').textContent='৳ '+cookBillShare.toFixed(2);
   document.getElementById('bl-my-bill').textContent='৳ '+netPayable.toFixed(2);
   document.getElementById('bl-balance').textContent='৳ '+bal.toLocaleString();

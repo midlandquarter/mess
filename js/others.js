@@ -79,13 +79,17 @@ function delOther(id){
 }
 function editOther(id){
   const o=DB.others.find(x=>x.id===id); if(!o) return;
+  // ✅ FIX BUG-03: bazar-এর মতোই — item-এর mess month bounds enforce করো।
+  // Bug: Date অন্য mess month-এ দিলে entry কোনো month-এই দেখা যেত না।
+  const itemMmKey=messMonthKey(new Date(o.date+'T12:00:00'));
+  const {minDate,maxDate}=getMessCycleBounds(itemMmKey);
   const html=`<div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">বিবরণ</label>
     <input id="edit-oth-desc" class="form-input" value="${esc(o.desc)}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">পরিমাণ ৳</label>
     <input id="edit-oth-amt" type="number" class="form-input" value="${o.amount}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">তারিখ</label>
-    <input id="edit-oth-date" type="date" class="form-input" value="${esc(o.date)}" style="margin-top:4px"></div>
+    <input id="edit-oth-date" type="date" class="form-input" value="${esc(o.date)}" min="${minDate}" max="${maxDate}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">ভাগের ধরন</label>
     <select id="edit-oth-split" class="form-input" style="margin-top:4px">
       <option value="equal" ${(o.split||'equal')==='equal'?'selected':''}>সমান ভাগ</option>
@@ -100,6 +104,8 @@ function editOther(id){
     if(!desc||desc.length<2){ toast('❌ বিবরণ দিন!'); return; }
     if(!validAmount(amount)){ toast('❌ সঠিক পরিমাণ দিন!'); return; }
     if(!date){ toast('❌ তারিখ দিন!'); return; }
+    // ✅ server-side validation
+    if(date<minDate||date>maxDate){ toast('❌ তারিখ এই মেস মাসের বাইরে দেওয়া যাবে না!'); return; }
     o.desc=desc; o.amount=amount; o.date=date; o.split=split;
     saveOtherItem(o); renderOthers(); closeModal(); toast('✅ আপডেট হয়েছে!');
   }, true);

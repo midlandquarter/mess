@@ -36,6 +36,12 @@ function homeShiftDate(delta){
   const base = homeViewDate || realToday;
   const d = new Date(base); d.setDate(d.getDate()+delta);
   const newDate = toISODate(d);
+  // ✅ FIX BUG-16: date bounds — অতীত ২ বছর, ভবিষ্যৎ ১ মাসের বেশি নয়।
+  // Bug: কোনো bound ছিল না — user 1970 বা 2099-এ চলে যেতে পারত।
+  const _minD = String(new Date().getFullYear()-2)+'-01-01';
+  const _tmp = new Date(); _tmp.setMonth(_tmp.getMonth()+1);
+  const _maxD = toISODate(_tmp);
+  if(newDate < _minD || newDate > _maxD) return;
   homeViewDate = newDate;
   refreshHome();
 }

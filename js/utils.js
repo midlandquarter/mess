@@ -34,13 +34,11 @@ function validPass(s){ return s && s.length>=6 && s.length<=100; }
 function validUsername(s){ return s && /^[a-zA-Z0-9_\-\.]{3,30}$/.test(s); }
 function validAmount(v){ return !isNaN(v) && v > 0 && v < 10000000; }
 function sanitizeInput(s){
-  return String(s||'').trim().slice(0,200)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#x27;')
-    .replace(/\//g,'&#x2F;');
+  // ✅ FIX BUG-06: শুধু trim ও length-limit।
+  // HTML encoding এখানে করলে render-এর সময় esc() দিয়ে double-encode হয়:
+  // "&" → "&amp;" (storage) → "&amp;amp;" (display) → user দেখে "&amp;"
+  // HTML encoding সম্পূর্ণভাবে render layer-এর দায়িত্ব: esc() বা safeHTML()।
+  return String(s||'').trim().slice(0,200);
 }
 
 
