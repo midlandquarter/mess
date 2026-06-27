@@ -12,7 +12,6 @@
 // Usage:
 //   node send_fcm.js "Notification Title" "Notification Body" "https://optional-url"
 // ═══════════════════════════════════════════════════════════════════
-
 const admin = require('firebase-admin');
 
 // Command line arguments
@@ -47,6 +46,7 @@ if (!projectId) {
   console.error('❌ project_id not found in service account JSON.');
   process.exit(1);
 }
+
 const databaseURL = `https://${projectId}-default-rtdb.firebaseio.com`;
 console.log(`📡 Project: ${projectId}`);
 
@@ -61,7 +61,7 @@ async function sendNotifications() {
   const messaging = admin.messaging();
 
   // ✅ FIX: 30s timeout — auth error হলে আর 6h hang করবে না
-  const _timeout = new Promise((_, reject) =>
+  const timeoutPromise = new Promise((resolve, reject) =>
     setTimeout(() => reject(new Error('⏱️ Timeout: Firebase 30s-এ respond করেনি। Service account চেক করুন।')), 30000)
   );
 
@@ -69,7 +69,7 @@ async function sendNotifications() {
   // path: users/{uid}/pushToken (push.js এখানে save করে)
   const snap = await Promise.race([
     db.ref('users').once('value'),
-    _timeout
+    timeoutPromise
   ]);
 
   if (!snap.exists()) {
@@ -98,17 +98,19 @@ async function sendNotifications() {
     tokens.map(token =>
       messaging.send({
         token,
-        notification: { title, body },
-        // Web Push-specific settings
+        // ✅ FIX: title/body webpush.notification-এ দিন (FCM v1 এর জন্য)
         webpush: {
           notification: {
-            icon : 'https://midlandquarter.github.io/mess/icon-192.png',
+            title: title,
+            body: body,
+            icon: 'https://midlandquarter.github.io/mess/icon-192.png',
             badge: 'https://midlandquarter.github.io/mess/icon-192.png',
             vibrate: [200, 100, 200],
             requireInteraction: false
           },
-          fcmOptions: {
-            link // notification-এ tap করলে এই URL খুলবে
+          // ✅ FIX: fcmOptions → fcm_options (snake_case)
+          fcm_options: {
+            link: link
           }
         }
       })
@@ -130,17 +132,17 @@ async function sendNotifications() {
         errCode.includes('invalid-registration-token') ||
         errCode.includes('invalid-argument');
       if (isInvalid) {
-        console.log(`🗑️  Removing invalid token for uid: ${uids[i]}`);
+        console.log(`🗑️ Removing invalid token for uid: ${uids[i]}`);
         toRemove['users/' + uids[i] + '/pushToken'] = null;
       } else {
-        console.warn(`⚠️  Send failed for uid ${uids[i]}:`, result.reason?.message || result.reason);
+        console.warn(`⚠️ Send failed for uid ${uids[i]}:`, result.reason?.message || result.reason);
       }
     }
   });
 
   if (Object.keys(toRemove).length > 0) {
     await db.ref().update(toRemove);
-    console.log(`🗑️  Removed ${Object.keys(toRemove).length} invalid token(s).`);
+    console.log(`🗑️ Removed ${Object.keys(toRemove).length} invalid token(s).`);
   }
 
   console.log('Done.');
@@ -151,4 +153,3 @@ sendNotifications().catch(err => {
   console.error('❌ Fatal error:', err);
   process.exit(1);
 });
-      
