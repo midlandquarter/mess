@@ -36,12 +36,6 @@ function homeShiftDate(delta){
   const base = homeViewDate || realToday;
   const d = new Date(base); d.setDate(d.getDate()+delta);
   const newDate = toISODate(d);
-  // ✅ FIX BUG-16: date bounds — অতীত ২ বছর, ভবিষ্যৎ ১ মাসের বেশি নয়।
-  // Bug: কোনো bound ছিল না — user 1970 বা 2099-এ চলে যেতে পারত।
-  const _minD = String(new Date().getFullYear()-2)+'-01-01';
-  const _tmp = new Date(); _tmp.setMonth(_tmp.getMonth()+1);
-  const _maxD = toISODate(_tmp);
-  if(newDate < _minD || newDate > _maxD) return;
   homeViewDate = newDate;
   refreshHome();
 }
@@ -237,19 +231,21 @@ const WE_SLOT_LABELS = { b:'সকাল', l:'দুপুর', d:'রাত' };
 function showWhoEatsDate(slot){
   _weDate = homeViewDate || tod();
   _weSlot = slot;
-  _weView = 'P';
   _collectWeData();
   _renderWeHeader();
-  _renderWeGrid();
+  // ✅ FIX Bug 2: আগে '_weView = P' set করত কিন্তু tab button styling reset করত না।
+  // Back করে ফিরলে: _weView=P কিন্তু Q button visually active (stale) → desync।
+  // setWeView('P') একসাথে: _weView set + button styling + _renderWeGrid() করে।
+  setWeView('P');
   sec('whoeats');
 }
 function showWhoEatsOnDate(slot, dateStr){
   _weDate = dateStr;
   _weSlot = slot;
-  _weView = 'P';
   _collectWeData();
   _renderWeHeader();
-  _renderWeGrid();
+  // ✅ FIX Bug 2: একই কারণে setWeView('P') ব্যবহার করো
+  setWeView('P');
   sec('whoeats');
 }
 function showWhoEats(slot){ showWhoEatsDate(slot); }
@@ -321,14 +317,23 @@ function _renderWeGrid(){
 
   grid.innerHTML = list.map(entry=>{
     const id  = entry.u.job || entry.u.u;
-    const lbl = entry.qty>1 ? id+'-P'+entry.qty : String(id);
+    // ✅ FIX Bug 1: '-P' hardcoded ছিল — Quarter tab-এও "1120-P2" দেখাত।
+    // Fix: _weView ব্যবহার করো, তাহলে Plant tab → P2, Quarter tab → Q2।
+    const lbl = entry.qty>1 ? id+'-'+_weView+entry.qty : String(id);
     return '<div style="background:var(--bg);border:1.5px solid '+color+';border-radius:7px;'+
            'padding:7px 4px;text-align:center;font-size:13px;font-weight:700;color:'+color+';'+
            'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(lbl)+'</div>';
   }).join('');
 }
 
-function renderWeScreen(){ /* legacy no-op */ }
+// ✅ FIX: আগে legacy no-op ছিল।
+// _refreshActiveScreen() (db.js) Firebase real-time update-এ এটা call করে।
+// no-op থাকলে whoeats screen-এ কেউ meal যোগ করলে live update হত না।
+function renderWeScreen(){
+  if(!_weSlot) return; // screen এখনো initialized হয়নি
+  _collectWeData();
+  _renderWeGrid();
+}
 
 // ── PDF Export (Plant only, 3-column grid, A4) ──
 function exportWhoEatsPDF(){
