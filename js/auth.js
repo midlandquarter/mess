@@ -135,11 +135,31 @@ auth.onAuthStateChanged(fbUser=>{
         // global/users-এ নেই মানে deleteMember() করা হয়েছে।
         // users/{uid} RTDB-এ এখনো থাকলেও এখানে ধরা পড়বে।
         if(syncIdx<0){
-          hideSplash();
-          auth.signOut(); CU=null; localStorage.removeItem('mq_authed');
-          showSc('login');
-          const _kal=document.getElementById('login-alert');
-          if(_kal){ _kal.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।'; _kal.className='alert alert-danger show'; }
+          // ✅ FIX: সরাসরি "deleted" না দেখিয়ে pendingApprovals চেক করো।
+          // Bug root cause: push.js, pending user-এর জন্যও users/{uid}/pushToken
+          // save করে। এতে users/{uid} node তৈরি হয়। auth flow মনে করে user
+          // approved — কিন্তু global/users-এ নেই → ভুলে "মুছে ফেলা" দেখাত।
+          firebase.database().ref('pendingApprovals/'+uid).once('value').then(pendSnap=>{
+            hideSplash();
+            auth.signOut(); CU=null; localStorage.removeItem('mq_authed');
+            showSc('login');
+            const _kal=document.getElementById('login-alert');
+            if(!_kal) return;
+            const pend=pendSnap.val();
+            if(pend && pend.status==='pending'){
+              _kal.innerHTML='⏳ <b>আপনার একাউন্ট পর্যালোচনা করা হচ্ছে।</b><br>মেস পরিচালকের সাথে যোগাযোগ করুন।';
+              _kal.className='alert alert-warning show';
+            } else if(pend && pend.status==='rejected'){
+              _kal.innerHTML='❌ আপনার আবেদন প্রত্যাখ্যান করা হয়েছে।<br><small>মেস পরিচালকের সাথে যোগাযোগ করুন।</small>';
+              _kal.className='alert alert-danger show';
+            } else {
+              _kal.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।';
+              _kal.className='alert alert-danger show';
+            }
+          }).catch(()=>{
+            hideSplash();
+            auth.signOut(); CU=null; localStorage.removeItem('mq_authed'); showSc('login');
+          });
           return;
         }
         // ✅ FIX: users/{uid} থেকে শুধু auth fields নাও।
@@ -459,23 +479,10 @@ function doResendFromCard(){
 }
 
 function resendVerificationEmail(email, pass){
-  // ✅ FIX: _registrationInProgress guard যোগ করা হয়েছে।
-  // Bug: signInWithEmailAndPassword সফল হলে onAuthStateChanged fire করে।
-  // সেখানে emailVerified=false দেখলে auth.signOut() call হয় —
-  // ফলে sendEmailVerification() চলার আগেই session শেষ হয়ে যায়।
-  // doResendFromCard()-এর মতো এখানেও guard দরকার।
-  _registrationInProgress = true; // onAuthStateChanged কে suppress করো
+  // Sign in temporarily to get the user object for resend
   auth.signInWithEmailAndPassword(email, pass).then(cred=>{
-    return cred.user.sendEmailVerification().then(()=>{
-      _registrationInProgress = false;
-      auth.signOut();
-      toast('✅ Verification email পাঠানো হয়েছে! ইনবক্স চেক করুন।');
-    });
-  }).catch(err=>{
-    _registrationInProgress = false;
-    auth.signOut().catch(()=>{}); // error-এও session সাফ করো
-    toast('❌ Email পাঠানো যায়নি: '+(err.message||''));
-  });
+    return cred.user.sendEmailVerification().then(()=>{ auth.signOut(); toast('✅ Verification email পাঠানো হয়েছে! ইনবক্স চেক করুন।'); });
+  }).catch(err=>{ toast('❌ Email পাঠানো যায়নি: '+(err.message||'')); });
 }
 
 function doRegister(){
