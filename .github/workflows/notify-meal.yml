@@ -1,16 +1,26 @@
+# ═══════════════════════════════════════════════════════════════════
 # .github/workflows/notify-meal.yml
-# cron-job.org থেকে workflow_dispatch-এ trigger হয়
-# GitHub-এর নিজের cron বাদ দেওয়া হয়েছে (delay হতো)
+# ─────────────────────────────────────────────────────────────────
+# রাত ৮টায় সব সদস্যকে মিল আপডেটের কথা মনে করিয়ে দেবে।
+# Bangladesh = UTC+6
+# রাত ৮:০০ PM BD = UTC 14:00
+# workflow_dispatch: GitHub-এর Actions tab থেকে manually test করা যাবে।
+# ═══════════════════════════════════════════════════════════════════
 
 name: Daily Meal Reminder (রাত ৮টা)
 
 on:
+  schedule:
+    # প্রতিদিন রাত ৮:০০ PM Bangladesh (= UTC 14:00)
+    - cron: '0 14 * * *'
+  # GitHub Actions tab থেকে manually trigger করার জন্য
   workflow_dispatch:
 
 jobs:
   send-notification:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 5  # auth error হলে 6h hang না করে 5 min-এ বন্ধ হবে
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -18,15 +28,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20'  # ✅ FIX: '24' নয়, '20' ব্যবহার করুন (stable)
 
       - name: Install Firebase Admin SDK
         run: npm install firebase-admin
+        # node_modules তৈরি হবে repo root-এ (শুধু এই Action-এর জন্য)
 
-      - name: Send notification
+      - name: Send meal reminder notification
         run: |
           node .github/workflows/send_fcm.js \
             "🍽️ মিল আপডেট করুন" \
-            "আগামী দিনের মিল আপডেট করতে ভুলে গেলে, অনুগ্রহ করে রাত ১০:০০টার মধ্যে আপডেট করুন।"
+            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
