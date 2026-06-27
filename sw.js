@@ -23,26 +23,37 @@ if (!firebase.apps.length) {
 
 const messaging = firebase.messaging();
 
-// Background message handler:
-// FCM payload-এ 'notification' field থাকলে এই callback call হয় না —
-// FCM SDK নিজেই notification দেখায়।
-// শুধু 'data'-only payload-এর জন্য এটা দরকার।
+// ✅ Background message handler:
+// FCM payload-এ 'notification' field থাকলে browser নিজেই notification দেখায়
+// এই callback শুধু 'data'-only payload-এর জন্য call হয়
 messaging.onBackgroundMessage(payload => {
+  console.log('[sw.js] Received background message:', payload);
+  
   const title = payload.notification?.title || payload.data?.title || 'মেস নোটিফিকেশন';
   const body  = payload.notification?.body  || payload.data?.body  || '';
-  return self.registration.showNotification(title, {
-    body,
-    icon : '/mess/icon-192.png',
-    badge: '/mess/icon-192.png',
+  const icon  = '/mess/icon-192.png';
+  const link  = payload.fcm_options?.link || payload.data?.url || 'https://midlandquarter.github.io/mess/';
+
+  const notificationOptions = {
+    body: body,
+    icon: icon,
+    badge: icon,
     vibrate: [200, 100, 200],
-    data: { url: payload.data?.url || 'https://midlandquarter.github.io/mess/' }
-  });
+    data: { url: link },
+    requireInteraction: false,
+    tag: 'meal-reminder' // একই notification বার বার আসবে না
+  };
+
+  return self.registration.showNotification(title, notificationOptions);
 });
 
-// Notification-এ tap করলে app খুলবে
+// ✅ Notification-এ tap করলে app খুলবে
 self.addEventListener('notificationclick', event => {
+  console.log('[sw.js] Notification clicked:', event.notification.title);
   event.notification.close();
+  
   const target = event.notification.data?.url || 'https://midlandquarter.github.io/mess/';
+  
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       // App ইতিমধ্যে খোলা থাকলে focus করো
@@ -55,9 +66,7 @@ self.addEventListener('notificationclick', event => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-
 const CACHE_VERSION = 'mq-v12'; // v12: Firebase Messaging added
-
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -73,6 +82,7 @@ const EXTERNAL_ASSETS = [
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js',
