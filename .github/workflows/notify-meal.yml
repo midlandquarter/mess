@@ -11,19 +11,22 @@ jobs:
   send-notification:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
 
       - name: Install Firebase Admin SDK
         run: npm install firebase-admin
 
       - name: Send notification
-        run: node .github/workflows/send_fcm.js "মিল আপডেট করুন" "আগামী দিনের মিল আপডেট করতে ভুলে গেলে, অনুগ্রহ করে রাত ১০:০০টার মধ্যে আপডেট করুন।"
+        run: |
+          node .github/workflows/send_fcm.js \
+            "🍽️ মিল আপডেট করুন" \
+            "আগামী দিনের মিল আপডেট করতে ভুলে গেলে, অনুগ্রহ করে রাত ১০:০০টার মধ্যে আপডেট করুন।"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          
