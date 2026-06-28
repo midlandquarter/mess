@@ -1,25 +1,13 @@
-# ═══════════════════════════════════════════════════════════════════
-# .github/workflows/notify-meal.yml
-# ─────────────────────────────────────────────────────────────────
-# রাত ৮টায় সব সদস্যকে মিল আপডেটের কথা মনে করিয়ে দেবে।
-# Bangladesh = UTC+6
-# রাত ৮:০০ PM BD = UTC 14:00
-# workflow_dispatch: GitHub-এর Actions tab থেকে manually test করা যাবে।
-# ═══════════════════════════════════════════════════════════════════
-
 name: Daily Meal Reminder (রাত ৮টা)
 
 on:
-  schedule:
-    # প্রতিদিন রাত ৮:০০ PM Bangladesh (= UTC 14:00)
-    - cron: '0 14 * * *'
   # GitHub Actions tab থেকে manually trigger করার জন্য
   workflow_dispatch:
 
 jobs:
   send-notification:
     runs-on: ubuntu-latest
-    timeout-minutes: 5  # auth error হলে 6h hang না করে 5 min-এ বন্ধ হবে
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository
@@ -28,11 +16,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'  # ✅ FIX: '24' নয়, '20' ব্যবহার করুন (stable)
+          node-version: '20'
 
       - name: Install Firebase Admin SDK
         run: npm install firebase-admin
-        # node_modules তৈরি হবে repo root-এ (শুধু এই Action-এর জন্য)
 
       - name: Send meal reminder notification
         run: |
