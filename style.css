@@ -586,7 +586,7 @@ body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--tex
 /* MESS MONTH INFO */
 .mess-month-bar{background:linear-gradient(90deg,var(--primary-dark),var(--primary));color:#fff;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:8px;}
 /* TOAST */
-.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--primary-dark);color:#fff;padding:12px 24px;border-radius:30px;font-size:14px;z-index:10002;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;max-width:90vw;}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--primary-dark);color:#fff;padding:16px 28px;border-radius:14px;font-size:16px;font-weight:600;line-height:1.4;z-index:10002;opacity:0;transition:all .3s;pointer-events:none;white-space:pre-line;max-width:88vw;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,0.3);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 /* MODAL */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:none;align-items:flex-end;justify-content:center;}
