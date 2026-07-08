@@ -348,7 +348,6 @@ function renderManagerInfo(){
           &nbsp; রুম ${esc(usr.room||'-')}
         </div>
       </div>
-      <button onclick="editController('${esc(u)}')" style="background:rgba(26,107,60,.15);color:var(--primary);border:1px solid var(--primary);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Edit</button>
     </div>`;
   }).join(''));
   const sel=document.getElementById('mgr-remove');
@@ -392,6 +391,14 @@ function setManager(){
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
   (DB.managers[month]||[]).forEach(u=>{ const usr=DB.users.find(x=>x.u===u); if(usr) sel.innerHTML+=`<option value="${esc(u)}">${esc(usr.name)}</option>`; });
+  // ✅ FIX: যদি নিজেই manager হিসেবে নিয়োগ পান (বিরল), active session refresh করো
+  // মূল fix: db.js globalRef.on('value') listener CU.role update করে _refreshActiveScreen()
+  // call করে — তাই assigned member পরের Firebase sync-এ (সাধারণত ১-২ সেকেন্ড) manager
+  // UI পাবেন। এখানে CU check শুধু same-user edge case cover করে।
+  if(CU && CU.u===uname && CU.role!=='manager'){
+    CU.role='manager';
+    try{ _refreshActiveScreen(); }catch(e){}
+  }
   toast('✅ ম্যানেজার নির্বাচন সফল!');
 }
 function removeManager(){
@@ -403,7 +410,15 @@ function removeManager(){
   if(u && u.role==='manager'){ u.role='member'; syncRole(uname,'member'); }
   // ✅ FIX: targeted saves — managers path + global only
   currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
-  saveGlobal(); saveUsers(); renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
+  saveGlobal(); saveUsers(); renderManagerInfo();
+  // ✅ FIX: যদি নিজের role বাদ দেওয়া হয় — active session এ সাথে সাথে member হয়ে যাবে
+  // মূল fix: db.js globalRef.on('value') listener CU.role detect করে refresh করে।
+  // এটা extra guard শুধু same-user বা immediate UI feedback এর জন্য।
+  if(CU && CU.u===uname && CU.role==='manager'){
+    CU.role='member';
+    try{ _refreshActiveScreen(); }catch(e){}
+  }
+  toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
 }
 // saveCfg() — moved to js/rules.js (rules screen function, misplaced in ADMIN)
 // Extracted: 2026-05-19 | Original lines: 2509–2536
