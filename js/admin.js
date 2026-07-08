@@ -1189,7 +1189,7 @@ function showAllMembersBill(){
     <div style="font-size:10px;font-weight:700;color:var(--text-light);letter-spacing:.6px;margin-bottom:10px;text-transform:uppercase">বিল বিবরণী</div>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0">
       <div style="font-size:12px;color:var(--text-light)">
-        মিল ${myShortfall>0?'('+myMeals.toFixed(2)+'+'+myShortfall.toFixed(2)+'SF)':'× '+myMeals.toFixed(2)}
+        মিল বিল - ${myShortfall>0?'('+myMeals.toFixed(2)+'+'+myShortfall.toFixed(2)+'SF)':myMeals.toFixed(2)}
         <span style="font-size:10px;color:var(--primary)"> × ৳${appliedRate.toFixed(2)}</span>
       </div>
       <div style="font-size:13px;font-weight:700">৳${fmtTk(mealBill)}</div>
