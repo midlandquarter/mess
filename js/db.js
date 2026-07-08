@@ -644,7 +644,8 @@ function loadDB(){
         // _dbLoaded guard: initial load-এ false → false kick নেই।
         // CU guard: login-এর আগে null → false kick নেই।
         if(_dbLoaded && CU && Array.isArray(DB.users)){
-          if(!DB.users.some(x=>x.uid===CU.uid||x.u===CU.u)){
+          const _myEntry = DB.users.find(x=>x.uid===CU.uid||x.u===CU.u);
+          if(!_myEntry){
             console.warn('[kick] CU no longer in global/users — forcing logout. uid=',CU.uid);
             auth.signOut().catch(()=>{});
             CU=null; localStorage.removeItem('mq_authed');
@@ -652,6 +653,21 @@ function loadDB(){
             try{
               const _kal=document.getElementById('login-alert');
               if(_kal){ _kal.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।'; _kal.className='alert alert-danger show'; }
+            }catch(e){}
+            return; // এই listener call-এ আর কিছু করার নেই
+          }
+          // ✅ FIX: ব্লক করা হলে active session থেকেও সাথে সাথে logout।
+          // আগে শুধু auth.js-এর onAuthStateChanged-এ (login-time, একবারই) চেক হতো —
+          // চলমান session-এ ব্লক করলে ধরা পড়ত না। globalRef.on('value') প্রতিটা
+          // change-এ চলে বলে এখানে active session-ও কভার হয়ে যায়।
+          if(_myEntry.blocked){
+            console.warn('[kick] CU has been blocked — forcing logout. uid=',CU.uid);
+            auth.signOut().catch(()=>{});
+            CU=null; localStorage.removeItem('mq_authed');
+            try{ showSc('login'); }catch(e){}
+            try{
+              const _kal=document.getElementById('login-alert');
+              if(_kal){ _kal.textContent='❌ আপনার অ্যাকাউন্ট ব্লক করা হয়েছে। Manager এর সাথে যোগাযোগ করুন।'; _kal.className='alert alert-danger show'; }
             }catch(e){}
             return; // এই listener call-এ আর কিছু করার নেই
           }
