@@ -41,7 +41,14 @@ function loadBill(){
   const {othersShare,cookBillShare,cookFoodShare}=calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost);
 
   let netPayable, mealBillDisplay=mealBill;
-  if(isOfficeMealUser(cu)){
+  if(cu.type==='cook'){
+    // ✅ FIX: বাবুর্চির নিজের bill নেই।
+    // তাদের খাবার খরচ ইতিমধ্যে cookFoodCost (CB) হিসেবে অন্য
+    // সদস্যদের মধ্যে ভাগ হয়ে যায়। তাই cook-কে আলাদা bill দিলে
+    // double counting হয়।
+    mealBillDisplay = 0;
+    netPayable = 0;
+  } else if(isOfficeMealUser(cu)){
     const ofRate=getOfficeMealRate(mmKey);
     mealBillDisplay=myNetMeals*ofRate;
     netPayable=mealBillDisplay; // no misc for office

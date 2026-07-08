@@ -361,6 +361,9 @@ function _getMemberCounts(mmKey=null){
 function invalidateMemberCountsCache(){ _memberCountsCache = null; }
 
 function calcMemberOtherShares(u, mmKey, othersAll, cookBillsAll, cookFoodCost=0){
+  // ✅ FIX: বাবুর্চির নিজের কোনো share নেই
+  // তাদের খাবার খরচ ইতিমধ্যে অন্য সদস্যদের cookFoodShare-এ যোগ হয়ে যায়
+  if(u.type==='cook') return {othersShare:0, cookBillShare:0, cookFoodShare:0};
   // অফিস মিল ইউজারদের বাবুর্চি ও অন্যান্য খরচ বহন করতে হয় না
   if(isOfficeMealUser(u)) return {othersShare:0, cookBillShare:0, cookFoodShare:0};
   // ✅ mmKey দিয়ে — historical month-এ শুধু সেই সময়ের active members গণনা
