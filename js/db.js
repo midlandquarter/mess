@@ -671,6 +671,14 @@ function loadDB(){
             }catch(e){}
             return; // এই listener call-এ আর কিছু করার নেই
           }
+          // ✅ FIX: role পরিবর্তন হলে (manager/controller assign বা remove) active
+          // session-এ সাথে সাথে reflect করা। CU শুধু login-এ set হতো, তাই role
+          // বদলালেও re-login না করা পর্যন্ত পুরনো role/মেনু আটকে থাকত।
+          if(_myEntry.role && _myEntry.role!==CU.role){
+            console.info('[sync] CU role updated:',CU.role,'→',_myEntry.role);
+            CU.role=_myEntry.role;
+            try{ _refreshActiveScreen(); }catch(e){}
+          }
         }
         _supplementGlobalFields();
       } else {

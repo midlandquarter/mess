@@ -127,7 +127,7 @@ function loadMembers(){
     const typeBadge=u.type==='cook'?`<span class="badge badge-cook">বাবুর্চি</span>`:isOfficeMealUser(u)?`<span class="badge badge-office">🏢 অফিস মিল</span>`:u.type==='outside'?`<span class="badge badge-outside">আউটসাইড</span>`:''
     const blockBadge=u.blocked?'<span class="badge badge-blocked">ব্লকড</span>':'';
     const ctrlBadge=isController(u)?'<span class="badge badge-ctrl">Controller</span>':'';
-    const mgrBadge=u.role==='manager'?'<span class="badge badge-mgr">Manager</span>':'';
+    const mgrBadge=(DB.managers[messMonthKey()]||[]).includes(u.u)?'<span class="badge badge-mgr">Manager</span>':'';
     // ── ID label — bold ও উজ্জ্বল ──
     const idLabel = u.job
       ? `<span style="font-weight:700;color:var(--primary);font-size:12px">ID ${esc(u.job)}</span>`

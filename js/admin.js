@@ -78,9 +78,12 @@ function initAdmin(){
       if(key===currentKey) opt.selected=true;
       mgrMonSel.appendChild(opt);
     }
+    // ✅ FIX: মাস dropdown বদলালে আগে ম্যানেজার তথ্য রিফ্রেশ হতো না — এখন হবে
+    mgrMonSel.onchange = renderManagerInfo;
   }
   document.getElementById('adm-dt').value=tod();
   applyMessCycleBounds('adm-dt');
+  _reconcileManagerRoles();
   renderManagerInfo();
   renderControllerList();
   initSiteNoteCard();
@@ -314,6 +317,19 @@ function resetHandoverLock(){
       saveHandover(); // controller-only path → handoverDone + prevBalances সেভ হবে
       toast('✅ লক রিসেট হয়েছে। এখন সঠিক মাস হস্তান্তর করুন।');
     });
+}
+// ✅ FIX: চলতি মাসের ম্যানেজার লিস্টে নেই এমন কারো role এখনো 'manager' থেকে
+// গেলে (আগের মাসে সেট হয়েছিল, কখনো বাদ দেওয়া হয়নি) সেটা 'member'-এ ফিরিয়ে
+// দাও — নাহলে stale manager-level অ্যাক্সেস থেকে যায় (badge ছাড়াও)।
+function _reconcileManagerRoles(){
+  const curMgrs = DB.managers[messMonthKey()]||[];
+  let changed=false;
+  DB.users.forEach(u=>{
+    if(u.role==='manager' && !curMgrs.includes(u.u)){
+      u.role='member'; syncRole(u.u,'member'); changed=true;
+    }
+  });
+  if(changed) saveUsers();
 }
 function renderManagerInfo(){
   const m=document.getElementById('mgr-month').value||mk();
