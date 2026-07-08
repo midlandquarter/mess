@@ -322,7 +322,12 @@ function resetHandoverLock(){
 // গেলে (আগের মাসে সেট হয়েছিল, কখনো বাদ দেওয়া হয়নি) সেটা 'member'-এ ফিরিয়ে
 // দাও — নাহলে stale manager-level অ্যাক্সেস থেকে যায় (badge ছাড়াও)।
 function _reconcileManagerRoles(){
-  const curMgrs = DB.managers[messMonthKey()]||[];
+  const raw = DB.managers[messMonthKey()];
+  // Guard: raw must be a flat array. If it's a nested object (migration
+  // not yet done) skip reconcile — better to leave stale 'manager' role
+  // than to wrongly demote everyone to 'member'.
+  if(!Array.isArray(raw)) return;
+  const curMgrs = raw;
   let changed=false;
   DB.users.forEach(u=>{
     if(u.role==='manager' && !curMgrs.includes(u.u)){
@@ -391,14 +396,6 @@ function setManager(){
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
   (DB.managers[month]||[]).forEach(u=>{ const usr=DB.users.find(x=>x.u===u); if(usr) sel.innerHTML+=`<option value="${esc(u)}">${esc(usr.name)}</option>`; });
-  // ✅ FIX: যদি নিজেই manager হিসেবে নিয়োগ পান (বিরল), active session refresh করো
-  // মূল fix: db.js globalRef.on('value') listener CU.role update করে _refreshActiveScreen()
-  // call করে — তাই assigned member পরের Firebase sync-এ (সাধারণত ১-২ সেকেন্ড) manager
-  // UI পাবেন। এখানে CU check শুধু same-user edge case cover করে।
-  if(CU && CU.u===uname && CU.role!=='manager'){
-    CU.role='manager';
-    try{ _refreshActiveScreen(); }catch(e){}
-  }
   toast('✅ ম্যানেজার নির্বাচন সফল!');
 }
 function removeManager(){
@@ -410,15 +407,7 @@ function removeManager(){
   if(u && u.role==='manager'){ u.role='member'; syncRole(uname,'member'); }
   // ✅ FIX: targeted saves — managers path + global only
   currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
-  saveGlobal(); saveUsers(); renderManagerInfo();
-  // ✅ FIX: যদি নিজের role বাদ দেওয়া হয় — active session এ সাথে সাথে member হয়ে যাবে
-  // মূল fix: db.js globalRef.on('value') listener CU.role detect করে refresh করে।
-  // এটা extra guard শুধু same-user বা immediate UI feedback এর জন্য।
-  if(CU && CU.u===uname && CU.role==='manager'){
-    CU.role='member';
-    try{ _refreshActiveScreen(); }catch(e){}
-  }
-  toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
+  saveGlobal(); saveUsers(); renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
 }
 // saveCfg() — moved to js/rules.js (rules screen function, misplaced in ADMIN)
 // Extracted: 2026-05-19 | Original lines: 2509–2536
