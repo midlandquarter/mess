@@ -159,7 +159,7 @@ function _calcHandoverData(mmKey){
   const ofRate=getOfficeMealRate(mmKey);
   // ✅ শুধু সেই মাসে active ছিল এমন users — নতুন member আগের মাসের carry-forward-এ যাবে না
   return DB.users.filter(u=>u.type!=='cook' && isActiveInMonth(u, mmKey)).map(u=>{
-    const isOff=isOfficeMealUser(u)||u.type==='cook'; // ✅ FIX: cook bill-exempt
+    const isOff=isOfficeMealUser(u);
     const appliedRate=isOff?(ofRate||pm):pm;
     const myMeals=messMonthMeals(u.u,mmKey);
     const myShortfall=getShortfallMeals(u.u,mmKey);
@@ -925,7 +925,7 @@ function _doMakePDF(type){
         const myMeals = messMonthMeals(u.u, mmKey);
         const myShortfall = getShortfallMeals(u.u, mmKey);
         const myNetMeals = myMeals + myShortfall;
-        const isOffU = isOfficeMealUser(u) || u.type==='cook'; // ✅ FIX: cook bill-exempt
+        const isOffU = isOfficeMealUser(u);
         const appRate = isOffU ? (pdfOfRate||pm) : pm;
         const mealBill = myNetMeals * appRate;
         const sh = isOffU ? {othersShare:0,cookBillShare:0,cookFoodShare:0}
