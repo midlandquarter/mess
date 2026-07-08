@@ -322,12 +322,7 @@ function resetHandoverLock(){
 // গেলে (আগের মাসে সেট হয়েছিল, কখনো বাদ দেওয়া হয়নি) সেটা 'member'-এ ফিরিয়ে
 // দাও — নাহলে stale manager-level অ্যাক্সেস থেকে যায় (badge ছাড়াও)।
 function _reconcileManagerRoles(){
-  const raw = DB.managers[messMonthKey()];
-  // Guard: raw must be a flat array. If it's a nested object (migration
-  // not yet done) skip reconcile — better to leave stale 'manager' role
-  // than to wrongly demote everyone to 'member'.
-  if(!Array.isArray(raw)) return;
-  const curMgrs = raw;
+  const curMgrs = DB.managers[messMonthKey()]||[];
   let changed=false;
   DB.users.forEach(u=>{
     if(u.role==='manager' && !curMgrs.includes(u.u)){
@@ -353,6 +348,7 @@ function renderManagerInfo(){
           &nbsp; রুম ${esc(usr.room||'-')}
         </div>
       </div>
+      <button onclick="editController('${esc(u)}')" style="background:rgba(26,107,60,.15);color:var(--primary);border:1px solid var(--primary);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Edit</button>
     </div>`;
   }).join(''));
   const sel=document.getElementById('mgr-remove');
@@ -391,7 +387,7 @@ function setManager(){
   if(u && u.role==='member'){ u.role='manager'; syncRole(uname,'manager'); }
   // ✅ FIX: saveDB() বাদ — targeted saves। managers=month data, users=global।
   // saveDB() → saveMonth() পুরো month array overwrite করত (race condition)।
-  currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
+  currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
   saveGlobal(); saveUsers(); renderManagerInfo();
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
@@ -406,7 +402,7 @@ function removeManager(){
   const u=DB.users.find(x=>x.u===uname);
   if(u && u.role==='manager'){ u.role='member'; syncRole(uname,'member'); }
   // ✅ FIX: targeted saves — managers path + global only
-  currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
+  currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
   saveGlobal(); saveUsers(); renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
 }
 // saveCfg() — moved to js/rules.js (rules screen function, misplaced in ADMIN)
@@ -513,7 +509,7 @@ function deleteMember(){
     // member মুছলে _minUserCount আপডেট — নাহলে false block
     if(typeof _minUserCount!=='undefined') _minUserCount=Math.max(0,new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size);
     saveControllers(); saveGlobal(); saveUsers(); // ✅ controllers আলাদা path
-    currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
+    currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
     // ✅ FIX: RTDB node cleanup — users/{uid} + roles/{uid} + pendingApprovals/{uid}
     // Bug: আগে এই cleanup ছিল না।
     // users/{uid} থেকে যায় → deleted user পেজ refresh করলে onAuthStateChanged
