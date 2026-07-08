@@ -1136,7 +1136,10 @@ function showAllMembersBill(){
   const myMeals=messMonthMeals(cu.u,mmKey);
   const myShortfall=getShortfallMeals(cu.u,mmKey);
   const myNetMeals=myMeals+myShortfall;
-  const mealBill=myNetMeals*appliedRate;
+  // ✅ FIX: বাবুর্চির নিজের bill নেই — bill.js এর loadBill()-এর সাথে একই রুল।
+  // cookFoodShare আগে থেকেই calcMemberOtherShares()-এ cook-দের জন্য ০ হয়;
+  // শুধু mealBill এখানে ০ করা হলো না বলেই বাবুর্চির Home স্ক্রিনে ভুল বিল দেখাচ্ছিল।
+  const mealBill=cu.type==='cook'?0:myNetMeals*appliedRate;
   const {othersShare,cookBillShare,cookFoodShare}=isOff
     ?{othersShare:0,cookBillShare:0,cookFoodShare:0}
     :calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost);
