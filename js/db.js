@@ -361,10 +361,33 @@ function migrateDB(){
   if(!DB.bazar) DB.bazar=[];
   if(!DB.managers) DB.managers={};
   if(!DB.controllers) DB.controllers=[];
-  // Migrate managers to array format
+  // Migrate managers to correct format
+  // Bug: setManager() করে DB.managers (পুরো object) Firebase-এ managers node-এ save করে।
+  // DB.managers = { "2026-06": [...] } → Firebase: months/2026-06/managers = {"2026-06": [...]}
+  // Reload-এ Firebase দেয়: DB.managers = { "2026-06": {"2026-06": [...]} } — nested!
+  // Fix: nested object হলে unwrap করো, string হলে array বানাও।
+  let _mgrFixed=false;
   Object.keys(DB.managers).forEach(k=>{
-    if(typeof DB.managers[k]==='string') DB.managers[k]=[DB.managers[k]];
+    const v=DB.managers[k];
+    if(typeof v==='string'){
+      DB.managers[k]=[v]; _mgrFixed=true;
+    } else if(v && typeof v==='object' && !Array.isArray(v)){
+      // nested object — unwrap: { "2026-06": [...] } → [...]
+      if(Array.isArray(v[k])){ DB.managers[k]=v[k]; _mgrFixed=true; }
+      else { const inner=Object.values(v).find(x=>Array.isArray(x)); DB.managers[k]=inner||[]; _mgrFixed=true; }
+    }
   });
+  // Firebase-এ corrupted managers data ছিল — fix হলে সাথে সাথে সঠিক data save করো
+  if(_mgrFixed && typeof currentMonthRef!=='undefined' && currentMonthRef){
+    const _cmk = typeof currentMonthKey!=='undefined' ? currentMonthKey : null;
+    if(_cmk && Array.isArray(DB.managers[_cmk])){
+      setTimeout(()=>{
+        currentMonthRef.child('managers').set(DB.managers[_cmk]||[])
+          .then(()=>console.log('[migrateDB] managers fixed & saved to Firebase'))
+          .catch(e=>console.warn('[migrateDB] managers save failed:',e));
+      }, 1500);
+    }
+  }
   // Ensure balance on all users, email field defaults
   DB.users.forEach(u=>{ if(!u.type) u.type='inside'; if(!u.email) u.email=''; });
   // ── Auto-dedup: একই u (username) দুইবার থাকলে সরাও ──

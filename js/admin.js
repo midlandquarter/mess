@@ -386,7 +386,7 @@ function setManager(){
   if(u && u.role==='member'){ u.role='manager'; syncRole(uname,'manager'); }
   // ✅ FIX: saveDB() বাদ — targeted saves। managers=month data, users=global।
   // saveDB() → saveMonth() পুরো month array overwrite করত (race condition)।
-  currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+  currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
   saveGlobal(); saveUsers(); renderManagerInfo();
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
@@ -409,7 +409,7 @@ function removeManager(){
   const u=DB.users.find(x=>x.u===uname);
   if(u && u.role==='manager'){ u.role='member'; syncRole(uname,'member'); }
   // ✅ FIX: targeted saves — managers path + global only
-  currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+  currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
   saveGlobal(); saveUsers(); renderManagerInfo();
   // ✅ FIX: যদি নিজের role বাদ দেওয়া হয় — active session এ সাথে সাথে member হয়ে যাবে
   // মূল fix: db.js globalRef.on('value') listener CU.role detect করে refresh করে।
@@ -524,7 +524,7 @@ function deleteMember(){
     // member মুছলে _minUserCount আপডেট — নাহলে false block
     if(typeof _minUserCount!=='undefined') _minUserCount=Math.max(0,new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size);
     saveControllers(); saveGlobal(); saveUsers(); // ✅ controllers আলাদা path
-    currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+    currentMonthRef.child('managers').set(DB.managers[currentMonthKey]||[]).catch(e=>console.error('Managers save:',e));
     // ✅ FIX: RTDB node cleanup — users/{uid} + roles/{uid} + pendingApprovals/{uid}
     // Bug: আগে এই cleanup ছিল না।
     // users/{uid} থেকে যায় → deleted user পেজ refresh করলে onAuthStateChanged
