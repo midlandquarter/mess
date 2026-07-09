@@ -192,7 +192,7 @@ auth.onAuthStateChanged(fbUser=>{
 // ═══════════════════════════════════════════════
 // Sync check — uses CU.role (already loaded from RTDB on login)
 function isController(u){ u=u||CU; return u&&(u.role==='controller'||(DB.controllers&&DB.controllers.includes(u.u))); }
-function isManager(u){ u=u||CU; return u&&(u.role==='manager'||u.role==='controller'||isController(u)); }
+function isManager(u){ u=u||CU; return u&&(u.role==='manager'||u.role==='controller'||isController(u)||(DB.managers&&(DB.managers[messMonthKey()]||[]).includes(u.u))); }
 function isManagerOrCtrl(u){ return isManager(u)||isController(u); }
 
 // Async RTDB role check (use when real-time accuracy needed)
@@ -205,6 +205,7 @@ function roleLabel(r,u){
   if(u&&isController(u)) return '⭐ Controller';
   if(r==='controller') return '⭐ Controller';
   if(r==='manager') return '👑 Manager';
+  if(u&&DB.managers&&(DB.managers[messMonthKey()]||[]).includes(u.u)) return '👑 Manager';
   return '👤 Member';
 }
 

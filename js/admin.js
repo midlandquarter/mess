@@ -328,6 +328,12 @@ function _reconcileManagerRoles(){
     if(u.role==='manager' && !curMgrs.includes(u.u)){
       u.role='member'; syncRole(u.u,'member'); changed=true;
     }
+    // ✅ FIX: Controller থেকে বাদ দেওয়ার পরও কারো role field মাঝেমধ্যে
+    // 'controller' আটকে থেকে যেতে পারে (DB.controllers থেকে বাদ গেলেও)।
+    // মিলিয়ে দেখে ঠিক করে দিচ্ছি — নাহলে ভুল Controller ব্যাজ দেখায়।
+    else if(u.role==='controller' && !(DB.controllers&&DB.controllers.includes(u.u))){
+      u.role='member'; syncRole(u.u,'member'); changed=true;
+    }
   });
   if(changed) saveUsers();
 }
