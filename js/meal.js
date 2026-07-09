@@ -140,7 +140,7 @@ function saveMeal(){
     const _mealMmKey = messMonthKey(new Date(mealDate));
     saveMealEntry(_mk,_mv,_mealMmKey);
     invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-    toast('✅ '+mealDate+' মিল সেভ!'); refreshHome(); }
+    toast('✅ '+mealDate+' তারিখের মিল সেভ হয়েছে'); refreshHome(); }
   );
 }
 function fmtMealLine(t,q,v){
