@@ -84,6 +84,7 @@ function initAdmin(){
   document.getElementById('adm-dt').value=tod();
   applyMessCycleBounds('adm-dt');
   _reconcileManagerRoles();
+  _cleanOrphanManagerRefs();
   renderManagerInfo();
   renderControllerList();
   initSiteNoteCard();
@@ -328,14 +329,39 @@ function _reconcileManagerRoles(){
     if(u.role==='manager' && !curMgrs.includes(u.u)){
       u.role='member'; syncRole(u.u,'member'); changed=true;
     }
-    // ✅ FIX: Controller থেকে বাদ দেওয়ার পরও কারো role field মাঝেমধ্যে
-    // 'controller' আটকে থেকে যেতে পারে (DB.controllers থেকে বাদ গেলেও)।
-    // মিলিয়ে দেখে ঠিক করে দিচ্ছি — নাহলে ভুল Controller ব্যাজ দেখায়।
+    // Controller থেকে বাদ দেওয়ার পরও role field মাঝেমধ্যে 'controller'
+    // আটকে থেকে যেতে পারে (DB.controllers থেকে বাদ গেলেও)। মিলিয়ে দেখে
+    // ঠিক করে দিচ্ছি — নাহলে ভুল Controller ব্যাজ দেখায়।
     else if(u.role==='controller' && !(DB.controllers&&DB.controllers.includes(u.u))){
       u.role='member'; syncRole(u.u,'member'); changed=true;
     }
   });
   if(changed) saveUsers();
+}
+// ✅ FIX (হালকা সংস্করণ): আগের ভার্সন পুরো months tree পড়ত (মিল/বাজার/
+// লেনদেন সহ সব ইতিহাস) — ডাউনলোড খরচ অনাবশ্যক বাড়ত। এখন শুধু প্রতি মাসের
+// ছোট্ট "managers" অংশটুকু আলাদাভাবে পড়া হয় (কয়েক বাইট), আর গত ১২ মাসের
+// মধ্যেই সীমাবদ্ধ, এবং প্রতি সেশনে মাত্র একবার চলে (বারবার Admin প্যানেলে
+// ঢুকলেও দ্বিতীয়বার চলবে না)। কাউকে ডিলিট (fully removed) না করলে কারো
+// রেফারেন্স মোছে না — চলমান/বর্তমান কোনো ম্যানেজার এতে কখনো সরানো হয় না।
+let _orphanMgrCleanDone=false;
+function _cleanOrphanManagerRefs(){
+  if(_orphanMgrCleanDone) return;
+  _orphanMgrCleanDone=true;
+  if(typeof monthsRef==='undefined'||!monthsRef) return;
+  const base=messMonthKey(); let [y,m]=base.split('-').map(Number);
+  for(let i=0;i<12;i++){
+    const mk2=y+'-'+String(m).padStart(2,'0');
+    monthsRef.child(mk2).child('managers').child(mk2).once('value').then(snap=>{
+      const arr=snap.val();
+      if(!Array.isArray(arr)) return;
+      const cleaned=arr.filter(u=>DB.users.some(x=>x.u===u));
+      if(cleaned.length!==arr.length){
+        monthsRef.child(mk2).child('managers').child(mk2).set(cleaned).catch(()=>{});
+      }
+    }).catch(()=>{});
+    m--; if(m<1){ m=12; y--; }
+  }
 }
 function renderManagerInfo(){
   const m=document.getElementById('mgr-month').value||mk();
@@ -354,7 +380,6 @@ function renderManagerInfo(){
           &nbsp; রুম ${esc(usr.room||'-')}
         </div>
       </div>
-      <button onclick="editController('${esc(u)}')" style="background:rgba(26,107,60,.15);color:var(--primary);border:1px solid var(--primary);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Edit</button>
     </div>`;
   }).join(''));
   const sel=document.getElementById('mgr-remove');
@@ -505,8 +530,14 @@ function deleteMember(){
   const balWarn=bal!==0
     ? `\n\n⚠️ সতর্কতা: এই সদস্যের বর্তমান ব্যালেন্স ৳${Math.abs(bal).toFixed(2)} (${bal>0?'জমা আছে':'বকেয়া আছে'})। মুছে ফেললে এই হিসাব হারিয়ে যাবে!`
     : '';
+  // ✅ FIX: ব্যালেন্সের পাশাপাশি চলতি মাসের মিলও ০ কিনা চেক করো — মিল থাকা
+  // অবস্থায় মুছলে চলতি মাসের মিল-হিসাব থেকে সেটা বাদ পড়ে যাবে।
+  const myMeals=messMonthMeals(uname,mmKey);
+  const mealWarn=myMeals>0
+    ? `\n\n⚠️ সতর্কতা: এই সদস্যের চলতি মাসে ${myMeals.toFixed(2)} মিল রেকর্ড আছে। মুছে ফেললে চলতি মাসের মিল হিসাব থেকে এটা বাদ পড়ে যাবে!`
+    : '';
 
-  showModal('সদস্য মুছুন',`${u?.name||uname} কে স্থায়ীভাবে মুছে ফেলবেন? সব ডেটা হারিয়ে যাবে!${balWarn}`,()=>{
+  showModal('সদস্য মুছুন',`${u?.name||uname} কে স্থায়ীভাবে মুছে ফেলবেন? সব ডেটা হারিয়ে যাবে!${balWarn}${mealWarn}`,()=>{
     // ✅ FIX: RTDB cleanup-এর জন্য uid আগেই নাও — DB.users filter করার পরে u হারিয়ে যাবে
     const targetUid = u?.uid;
     DB.users=DB.users.filter(x=>x.u!==uname);
@@ -516,6 +547,24 @@ function deleteMember(){
     if(typeof _minUserCount!=='undefined') _minUserCount=Math.max(0,new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size);
     saveControllers(); saveGlobal(); saveUsers(); // ✅ controllers আলাদা path
     currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+    // ✅ FIX: শুধু বর্তমানে লোড করা মাস না — গত ২৪ মাসের ম্যানেজার
+    // রেফারেন্স থেকেও এই সদস্যকে সরিয়ে দাও, একেবারে delete-এর মুহূর্তেই।
+    // এটা শুধু "কে ম্যানেজার ছিল" এই ছোট্ট রেফারেন্স ছোঁয় — মিল/বাজার/
+    // জমা-উত্তোলনের কোনো ঐতিহাসিক হিসাবে হাত দেয় না।
+    (function _purgeManagerRefsAllMonths(){
+      if(typeof monthsRef==='undefined'||!monthsRef) return;
+      const base=messMonthKey(); let [py,pm]=base.split('-').map(Number);
+      for(let i=0;i<24;i++){
+        const pk=py+'-'+String(pm).padStart(2,'0');
+        monthsRef.child(pk).child('managers').child(pk).once('value').then(snap=>{
+          const arr=snap.val();
+          if(Array.isArray(arr)&&arr.includes(uname)){
+            monthsRef.child(pk).child('managers').child(pk).set(arr.filter(x=>x!==uname)).catch(()=>{});
+          }
+        }).catch(()=>{});
+        pm--; if(pm<1){ pm=12; py--; }
+      }
+    })();
     // ✅ FIX: RTDB node cleanup — users/{uid} + roles/{uid} + pendingApprovals/{uid}
     // Bug: আগে এই cleanup ছিল না।
     // users/{uid} থেকে যায় → deleted user পেজ refresh করলে onAuthStateChanged
@@ -545,7 +594,6 @@ function renderControllerList(){
             &nbsp; রুম ${esc(usr.room||'-')} · ${esc(usr.job||'-')}
           </div>
         </div>
-        <button onclick="editController('${esc(c)}')" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✏️ Edit</button>
       </div>`;
     }).join(''));
   }
