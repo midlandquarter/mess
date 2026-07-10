@@ -288,7 +288,15 @@ function saveOfficeMeal(key){
   const bQ=parseInt(document.getElementById('ofms-qty-'+key+'-b')?.value)||1;
   const lQ=parseInt(document.getElementById('ofms-qty-'+key+'-l')?.value)||1;
   const dQ=parseInt(document.getElementById('ofms-qty-'+key+'-d')?.value)||1;
-  const bv=mealTypeValue('b',bT,bQ,date), lv=mealTypeValue('l',lT,lQ,date), dv=mealTypeValue('d',dT,dQ,date);
+  // ✅ FIX: mealTypeValue() নামে কোনো function-ই নেই — সঠিক নাম mTV(), আর তার
+  // signature আলাদা (t, {t,q} অবজেক্ট, date, type)। ভুল নামে call করায়
+  // "mealTypeValue is not defined" error থ্রো হতো এখানেই — showModal() পর্যন্ত
+  // কোড কখনো পৌঁছাতই না, তাই কনফারমেশন পপআপ আসত না। P/Q বাটন আগেই আলাদাভাবে
+  // হাইলাইট হয়ে গিয়েছিল (ofmsSetPQO) বলে মিল "চালু" হয়ে গেছে মনে হতো, কিন্তু
+  // Save আসলে silently crash করত — Firebase-এ কিছুই সেভ হতো না।
+  // 'inside' রাখা হয়েছে যেন ঠিক উপরের ofmsCalcMeal()-এর live preview-এর
+  // সাথে সংখ্যা মিলে যায় (সেটাও 'inside' দিয়েই হিসাব করে)।
+  const bv=mTV('b',{t:bT,q:bQ},date,'inside'), lv=mTV('l',{t:lT,q:lQ},date,'inside'), dv=mTV('d',{t:dT,q:dQ},date,'inside');
   const bLabel=bT==='off'?'off':(bQ>1?bT+bQ:bT);
   const lLabel=lT==='off'?'off':(lQ>1?lT+lQ:lT);
   const dLabel=dT==='off'?'off':(dQ>1?dT+dQ:dT);
