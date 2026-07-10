@@ -84,7 +84,7 @@ function initAdmin(){
   document.getElementById('adm-dt').value=tod();
   applyMessCycleBounds('adm-dt');
   // ✅ FIX: Admin meal edit-এ পরের মেস চক্রের ১০ তারিখ পর্যন্ত allow করো
-  const _nk=nextCycleKey(), [_ny,_nm]=_nk.split('-').map(Number);
+  const _nk=nextCycleKey(messMonthKey()), [_ny,_nm]=_nk.split('-').map(Number);
   const _em=_nm===12?1:_nm+1, _ey=_nm===12?_ny+1:_ny;
   const _admDtEl=document.getElementById('adm-dt');
   if(_admDtEl) _admDtEl.max=`${_ey}-${String(_em).padStart(2,'0')}-10`;
