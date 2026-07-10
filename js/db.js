@@ -261,6 +261,18 @@ function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return
 function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('others').child(String(id)).remove().catch(e=>console.error('OthersDel:',e)); }
 function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
 function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
+// ✅ FIX: office-meal.js এই দুইটা function ৬ জায়গায় call করে (saveOfficeMeal,
+// saveOfficeMealNote, saveOfficeMealNoteScreen, editOfficeMealNote,
+// delOfficeMealNote), file_report.md-ও এদের db.js-এর অংশ বলে ধরে নিয়েছে —
+// কিন্তু আসলে কোথাও define করা ছিল না। ফলে note থাকলে saveOfficeMeal()-এর
+// callback এই লাইনে এসে থেমে যেত (ReferenceError) — DB.meals আর
+// DB.officeMealNotes লোকালি বসে যেত (তাই UI-তে দেখাত/মিল "চালু" মনে হতো),
+// কিন্তু এর ঠিক পরের toggleOfficeMealEntry()/toast() আর কখনো চলত না
+// (confirmation msg না আসা), আর নোটটা Firebase-এ আসলে লেখাই হতো না
+// (তাই refresh করলে হারিয়ে যেত)। saveBazarItem/saveOtherItem/saveTxItem-এর
+// মতোই individual-path pattern।
+function saveOfficeMealNoteItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>console.error('OfficeMealNote:',e)); }
+function deleteOfficeMealNoteItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>console.error('OfficeMealNoteDel:',e)); }
 
 // ── Pending Approval helpers ────────────────────────────────────────────────
 // Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
