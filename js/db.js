@@ -753,6 +753,27 @@ function loadDB(){
         invalidateMealIndex(); invalidateMealRateCache();
         if(_dbLoaded) refreshHome();
       });
+      // ✅ FIX: চলতি মেস-চক্রের শেষ দিন/রাতেই পরের চক্রের মিল দেওয়া শুরু
+      // হয়ে যায় (যেমন সকালের নাস্তার জন্য আগের রাতেই এন্ট্রি লাগে) — কিন্তু
+      // শুধু currentMonthRef লোড হতো, তাই পরের bucket-এর মিল Firebase-এ
+      // ঠিকই সেভ হতো কিন্তু কোথাও দেখাই যেত না। এখন পরের মাসের মিলও
+      // একইভাবে লোড ও লাইভ-সিঙ্ক করা হচ্ছে — একই DB.meals-এ merge হয়
+      // (key-তে exact তারিখ থাকে বলে দুই মাসের এন্ট্রি কখনো একে অপরকে
+      // ওভাররাইট করবে না, আলাদা meal.js/home.js ফাইল ছোঁয়ার দরকার নেই)।
+      const nextMonthRef = monthsRef.child(nextCycleKey(currentMonthKey));
+      nextMonthRef.child('meals').once('value').then(snap=>{
+        const data=snap.val();
+        if(data) Object.keys(data).forEach(k=>{ DB.meals[k]=data[k]; });
+        invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
+        if(_dbLoaded) refreshHome();
+      }).catch(()=>{});
+      nextMonthRef.child('meals').on('child_added',   _handleMeal);
+      nextMonthRef.child('meals').on('child_changed', _handleMeal);
+      nextMonthRef.child('meals').on('child_removed', snap=>{
+        if(snap.key) delete DB.meals[snap.key];
+        invalidateMealIndex(); invalidateMealRateCache();
+        if(_dbLoaded) refreshHome();
+      });
     }
 
     // ── Page hide/show: connection manage ──
