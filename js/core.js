@@ -61,11 +61,15 @@ function isActiveInMonth(u, mmKey){
 //   calcMealRate()         → getOfficeMealUsers()  (line 4455)
 // All three have zero deps beyond DB (config.js, loads first ✓).
 function isOfficeMealUser(u){
-  if(!u) return false;
-  if(u._office) return true;
-  const nm=(u.name||'').toLowerCase();
-  const un=(u.u||'').toLowerCase();
-  return nm.includes('mepl')||nm.includes('mpcl')||un.includes('mepl')||un.includes('mpcl')||un==='off_mepl'||un==='off_mpcl';
+  // ✅ FIX: শুধু _office flag চেক করো — name/username substring match
+  // বাদ দেওয়া হলো। কারণ real member "আব্দুর রহিম (MPCL)" এর নামে
+  // "MPCL" (তার কর্মস্থল) থাকায় ভুলভাবে office-meal user হিসেবে ধরা
+  // হচ্ছিল — ফলে তার জুলাই মাসের real meal (07-11, 07-18, 07-30) office
+  // মিল bucket-এ চলে যাচ্ছিল, আর সে নিজে অন্যান্য/বাবুর্চি খরচ থেকে বাদ
+  // পড়ে যাচ্ছিল (see meal.js calcMemberOtherShares)। office-meal.js-এ
+  // account তৈরির একমাত্র জায়গায় সবসময় _office:true সেট হয় (নিশ্চিত করা
+  // হয়েছে) — তাই এই flag-ই যথেষ্ট এবং নির্ভরযোগ্য একমাত্র সংকেত।
+  return !!(u && u._office);
 }
 
 function getOfficeMealUsers(){

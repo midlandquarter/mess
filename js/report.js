@@ -8,8 +8,7 @@
 // Depends on (all global):
 //   config.js  → DB
 //   utils.js   → _withMonthData(), safeHTML()
-//   core.js    → getOfficeMealRate(), getOfficeMealUsers()
-//   meal.js    → calcMealRate(), messMonthMeals()
+//   meal.js    → calcMealRate()
 //
 // Exposes (global, used by inline onclick):
 //   loadReport()       ← onchange / onclick in sc-report HTML
@@ -29,15 +28,19 @@ function loadReport(forceRefresh=false){
 }
 
 function _doLoadReport(mmKey){
-  const {bazar,others,othersAll,cookBillsTotal,cookBillsAll,total,totalMeals,cookMeals,officeMeals,netMeals,M,C,R,X,r1,pm,cookFoodCost}=calcMealRate(mmKey);
+  const {bazar,others,othersAll,cookBillsTotal,cookBillsAll,total,totalMeals,cookMeals,officeMeals,netMeals,M,C,R,X,r1,pm,cookFoodCost,officeBil}=calcMealRate(mmKey);
 
   const [my,mm]=mmKey.split('-').map(Number);
   const nm=mm===12?1:mm+1;
   const mnames=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
   const monthRangeLabel=`${mnames[mm-1]} ১১ – ${mnames[nm-1]} ১০, ${my}`;
 
-  const officeRate=getOfficeMealRate(mmKey);
-  const officeMealBill=getOfficeMealUsers().reduce((s,u)=>s+messMonthMeals(u.u,mmKey)*officeRate,0);
+  // ✅ FIX: officeMealBill আলাদাভাবে recompute করা হতো (getOfficeMealUsers()+
+  // messMonthMeals() দিয়ে), যা calcMealRate()-এর officeBil-এর সাথে duplicate
+  // ছিল কিন্তু shortfall যোগ করত না — ফলে meal count (officeMeals, শর্টফল সহ)
+  // আর bill amount (officeMealBill, শর্টফল ছাড়া) ভবিষ্যতে অসামঞ্জস্যপূর্ণ হতে
+  // পারত। calcMealRate()-এর officeBil সরাসরি ব্যবহার করাই সঠিক ও সামঞ্জস্যপূর্ণ।
+  const officeMealBill=officeBil;
 
   const html=`
   <div class="summary-hero-card" style="border-radius:14px;padding:18px 18px 14px;">

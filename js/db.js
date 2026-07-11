@@ -658,6 +658,20 @@ function loadDB(){
         if(_dbLoaded && CU && Array.isArray(DB.users)){
           const _myEntry = DB.users.find(x=>x.uid===CU.uid||x.u===CU.u);
           if(!_myEntry){
+            // ✅ FIX: false "account deleted" logout ঠেকানো —
+            // আগে এখানে entry না পেলেই সাথে সাথে logout করে দেওয়া হতো।
+            // কিন্তু Firebase থেকে মাঝেমধ্যে সাময়িক/অসম্পূর্ণ snapshot আসে
+            // (অন্য client একই সময়ে users write করলে, বা race condition-এ)
+            // — তখন real deletion ছাড়াও ভুলভাবে kick হয়ে যেত (একজন
+            // controller নিজেই "account deleted" দেখেছিলেন যদিও ডাটা ঠিকই ছিল)।
+            // এখন: users count যদি Firebase-এর জানা সর্বোচ্চ count
+            // (_minUserCount)-এর চেয়ে কম হয়, snapshot-টা অসম্পূর্ণ/অবিশ্বস্ত
+            // ধরে নিয়ে kick স্কিপ করো — পরের সম্পূর্ণ snapshot এলে আবার চেক হবে।
+            const _uniqNow=new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size;
+            if(_minUserCount>0 && _uniqNow<_minUserCount){
+              console.warn('[kick SKIPPED] incomplete snapshot: users='+_uniqNow+' < expected='+_minUserCount+'. Not logging out.');
+              return; // অবিশ্বস্ত snapshot — কিছুই করার দরকার নেই, পরের update-এর অপেক্ষা
+            }
             console.warn('[kick] CU no longer in global/users — forcing logout. uid=',CU.uid);
             auth.signOut().catch(()=>{});
             CU=null; localStorage.removeItem('mq_authed');
