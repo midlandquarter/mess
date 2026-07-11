@@ -251,15 +251,41 @@ function doMonthHandover(){
       };
 
       // ── Step 1: historical data দিয়ে calculate, তারপর DB restore করো ──
+      // ✅ FIX (হ্যান্ডওভার crash + সব ডাটা 0): bazar/others/transactions/
+      // officeMealNotes/cookBills — এই ফিল্ডগুলো Firebase-এ item.id
+      // (genId() = বড় সংখ্যা) দিয়ে key করা OBJECT আকারে থাকে, array আকারে
+      // না (saveBazarItem/saveTxItem ইত্যাদি .child(id).set() দিয়ে সেভ করে)।
+      // আগে এখানে সরাসরি DB[f]=hist[f] বসানো হতো, ফলে DB.bazar/others/
+      // transactions একটা plain object হয়ে যেত। এরপর _calcHandoverData()
+      // → calcMealRate()-এ DB.bazar.filter(...) চালাতে গিয়ে "filter is not
+      // a function" TypeError থ্রো হতো — সেটাই "ডেটাবেস load ব্যর্থ" টোস্টের
+      // আসল কারণ। db.js-এর loadDB() ঠিক এই কারণেই একই ফিল্ডগুলোতে
+      // _ensureArr() ব্যবহার করে — এখানেও এখন সেটাই করা হলো।
+      const _HIST_ARR_FIELDS = ['bazar','others','transactions','officeMealNotes','cookBills'];
       const _calcWithHist = (hist) => {
         const saved = {};
         MONTH_FIELDS.forEach(f => { saved[f] = DB[f]; });
-        MONTH_FIELDS.forEach(f => { DB[f] = hist[f] || (f==='meals'||f==='managers'||f==='mealRates'||f==='officeMealRates' ? {} : []); });
+        MONTH_FIELDS.forEach(f => {
+          const v = hist[f] || (f==='meals'||f==='managers'||f==='mealRates'||f==='officeMealRates' ? {} : []);
+          DB[f] = _HIST_ARR_FIELDS.includes(f) ? _ensureArr(v).sort((a,b)=>(a.id||0)-(b.id||0)) : v;
+        });
         invalidateMealIndex(); invalidateMealRateCache();
-        const rows = _calcHandoverData(mmKey);   // ঐতিহাসিক data দিয়ে সঠিক হিসাব
-        // *** DB restore — saveGlobal-এর আগে অবশ্যই ***
-        MONTH_FIELDS.forEach(f => { DB[f] = saved[f]; });
-        invalidateMealIndex(); invalidateMealRateCache();
+        // ✅ FIX (লক রিসেট না করলে ডাটা ফেরত আসত না): _calcHandoverData()
+        // এর ভেতরে (উপরের bug ছাড়াও, ভবিষ্যতে অন্য যেকোনো কারণে) exception
+        // থ্রো করলে আগে নিচের DB restore লাইন কখনো চলত না — DB চিরস্থায়ীভাবে
+        // ঐতিহাসিক/আধা-swap অবস্থায় আটকে থাকত, তাই মেসের সব হিসাব 0 দেখাত,
+        // যতক্ষণ না loadDB() আবার পুরো ডেটা টেনে ঠিক করে দিত (যা "লক রিসেট"
+        // এর পরের কোনো full reload/refresh-এ ঘটছিল)। try/finally দিয়ে এখন
+        // restore সবসময় guaranteed — error হলেও DB ঠিক জায়গায় ফিরবে, শুধু
+        // এই handover-টা বাতিল হয়ে toast দেখাবে, ডাটা নষ্ট হবে না।
+        let rows;
+        try{
+          rows = _calcHandoverData(mmKey);   // ঐতিহাসিক data দিয়ে সঠিক হিসাব
+        } finally {
+          // *** DB restore — saveGlobal-এর আগে অবশ্যই, error হলেও ***
+          MONTH_FIELDS.forEach(f => { DB[f] = saved[f]; });
+          invalidateMealIndex(); invalidateMealRateCache();
+        }
         _applyHandover(rows);
       };
 
