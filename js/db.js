@@ -536,37 +536,7 @@ function _refreshActiveScreen(){
   else if(activeId==='whoeats') renderWeScreen();
 }
 
-// ── Background: global-এ missing fields পুরানো top-level থেকে copy করা ──
-let _supplementDone = false;
-function _supplementGlobalFields(){
-  if(_supplementDone) return;
-  _supplementDone = true;
-  const toCheck = [];
-  if(!DB.rules || !DB.rules.text) toCheck.push('rules');
-  if(!DB.shortfall || !Object.keys(DB.shortfall).length) toCheck.push('shortfall');
-  if(!DB.prevBalances) toCheck.push('prevBalances');
-  if(!DB.handoverDone || !DB.handoverDone.length) toCheck.push('handoverDone');
-  // পুরানো top-level fields — missing supplement + cleanup একসাথে
-  const OLD_FIELDS = ['cfg','users','notice','siteNote','controllers','rules','shortfall',
-    'prevBalances','handoverDone','meals','bazar','others','transactions','managers',
-    'mealRates','officeMealRates','officeMealNotes','cookBills'];
-  const reads = OLD_FIELDS.map(f=>
-    dbRef.child(f).once('value').then(s=>({f,v:s.val()})).catch(()=>({f,v:null}))
-  );
-  Promise.all(reads).then(results=>{
-    const gUpdates={};
-    const cleanups=[];
-    results.forEach(({f,v})=>{
-      if(v===null) return;
-      if(toCheck.includes(f)){ DB[f]=v; gUpdates[f]=v; }
-      cleanups.push(dbRef.child(f).remove().catch(()=>{}));
-    });
-    if(Object.keys(gUpdates).length) globalRef.update(gUpdates).catch(()=>{});
-    Promise.all(cleanups).then(()=>console.log('✅ Firebase cleanup done'));
-  });
-}
-
-// Real-time listener — দুটো listener: global + current mess month
+// ── Real-time listener — দুটো listener: global + current mess month
 function loadDB(){
   // ── Idempotency guard ─────────────────────────────────────────────────────
   // index.html-এর bootstrap observer প্রতিটা sign-in event-এ loadDB() call করে।
@@ -706,7 +676,6 @@ function loadDB(){
             try{ _refreshActiveScreen(); }catch(e){}
           }
         }
-        _supplementGlobalFields();
       } else {
         migrateDB();
         const initG={}; GLOBAL_FIELDS.forEach(f=>{ initG[f]=DB[f]; });
