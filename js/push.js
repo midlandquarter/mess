@@ -13,7 +13,12 @@
 //     "Generate key pair" থেকে পাওয়া Public key এখানে বসাও।
 // ═══════════════════════════════════════════════════════════════════
 
-const VAPID_KEY = 'BN5I0AJqbVGfhQnedAKjHcwUojZMEdszieqwvQnucvWI6t5VBmxXNNW4OgPpVqbuLOAase6BP9kuRnqP14i4_Yo';
+const VAPID_KEY = 'BBMjg0ezmZK00Vy0jiK2DpZcgBdK-vmMqD8UiWXDcWjvpm_Q67eEkG2JwpWxmKSqyOtNYOfCSgWamf5GmttUiho';
+// ✅ FIX: আগের key (BN5I0AJq...) Firebase Console-এর Cloud Messaging →
+// Web Push certificates-এ যা আছে তার সাথে মিলছিল না — token subscribe
+// request Google-এর সার্ভারে "authentication credential missing" বলে
+// reject হতো (messaging/token-subscribe-failed)। Console থেকে সরাসরি
+// কপি করা সঠিক key এখন বসানো হলো।
 // ↑ Firebase Console → Project Settings → Cloud Messaging →
 //   Web Push certificates → Key pair (copy the public key)
 
