@@ -1,14 +1,27 @@
+# ═══════════════════════════════════════════════════════════════════
+# .github/workflows/notify-meal.yml
+# ─────────────────────────────────────────────────────────────────
+# রাত ৮টায় সব সদস্যকে মিল আপডেটের কথা মনে করিয়ে দেবে।
+#
+# Bangladesh = UTC+6
+# রাত ৮:০০ PM BD = UTC 14:00
+#
+# workflow_dispatch: GitHub-এর Actions tab থেকে manually test করা যাবে।
+# ═══════════════════════════════════════════════════════════════════
+
 name: Daily Meal Reminder (রাত ৮টা)
 
 on:
+  schedule:
+    # প্রতিদিন রাত ৮:০০ PM Bangladesh (= UTC 14:00)
+    - cron: '0 14 * * *'
   # GitHub Actions tab থেকে manually trigger করার জন্য
   workflow_dispatch:
 
 jobs:
   send-notification:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+    timeout-minutes: 5  # auth error হলে 6h hang না করে 5 min-এ বন্ধ হবে
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,11 +33,15 @@ jobs:
 
       - name: Install Firebase Admin SDK
         run: npm install firebase-admin
+        # node_modules তৈরি হবে repo root-এ (শুধু এই Action-এর জন্য)
 
       - name: Send meal reminder notification
         run: |
           node .github/workflows/send_fcm.js \
             "🍽️ মিল আপডেট করুন" \
-            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!"
+            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!" \
+            "https://midlandquarter.github.io/mess/" \
+            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=720&auto=format&fit=crop"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          
