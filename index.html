@@ -2,22 +2,6 @@
 <html lang="bn-BD">
 <head>
 <meta charset="UTF-8">
-<!-- ── অস্থায়ী মোবাইল ডিবাগ কনসোল ─────────────────────────────────
-     শুধু URL-এর শেষে ?debug=1 যোগ করলেই চালু হবে (যেমন:
-     https://midlandquarter.github.io/mess/?debug=1) — সাধারণ
-     ব্যবহারকারীদের জন্য এটা লোডই হয় না, সাইটের গতি/আচরণে কোনো
-     প্রভাব নেই। কাজ শেষে এই ব্লকটা মুছে দিলেই সরে যাবে। ──
--->
-<script>
-(function(){
-  if(new URLSearchParams(location.search).get('debug')==='1'){
-    var s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/eruda';
-    s.onload=function(){ eruda.init(); };
-    document.head.appendChild(s);
-  }
-})();
-</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Midland Quarter - মেস ম্যানেজমেন্ট সিস্টেম</title>
 <link rel="icon" href="favicon.ico">
