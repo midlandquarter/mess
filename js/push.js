@@ -13,12 +13,7 @@
 //     "Generate key pair" থেকে পাওয়া Public key এখানে বসাও।
 // ═══════════════════════════════════════════════════════════════════
 
-const VAPID_KEY = 'BBMjg0ezmZK00Vy0jiK2DpZcgBdK-vmMqD8UiWXDcWjvpm_Q67eEkG2JwpWxmKSqyOtNYOfCSgWamf5GmttUiho';
-// ✅ FIX: আগের key (BN5I0AJq...) Firebase Console-এর Cloud Messaging →
-// Web Push certificates-এ যা আছে তার সাথে মিলছিল না — token subscribe
-// request Google-এর সার্ভারে "authentication credential missing" বলে
-// reject হতো (messaging/token-subscribe-failed)। Console থেকে সরাসরি
-// কপি করা সঠিক key এখন বসানো হলো।
+const VAPID_KEY = 'BN5I0AJqbVGfhQnedAKjHcwUojZMEdszieqwvQnucvWI6t5VBmxXNNW4OgPpVqbuLOAase6BP9kuRnqP14i4_Yo';
 // ↑ Firebase Console → Project Settings → Cloud Messaging →
 //   Web Push certificates → Key pair (copy the public key)
 
@@ -112,7 +107,10 @@ async function _registerPush(user) {
       if (Notification.permission === 'granted') {
         new Notification(title, {
           body,
-          icon: '/mess/icon-192.png'
+          icon: '/mess/icon-192.png',
+          // ✅ NEW: send_fcm.js থেকে ছবি এলে foreground-এও দেখাও (background-এর
+          // মতো সামঞ্জস্যপূর্ণ) — না থাকলে আগের মতোই শুধু text
+          ...(payload.notification?.image ? { image: payload.notification.image } : {})
         });
       }
     });
