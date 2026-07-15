@@ -171,7 +171,7 @@ function _calcHandoverData(mmKey){
     const mealBill=myNetMeals*appliedRate;
     const {othersShare,cookFoodShare}=isOff
       ?{othersShare:0,cookFoodShare:0}
-      :calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost);
+      :calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
     const totalBill=mealBill+othersShare+cookFoodShare;
     const prevBal=getPreBal(u.u, mmKey);
     const monthDep=(DB.transactions||[])
@@ -449,7 +449,7 @@ function setManager(){
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
   (DB.managers[month]||[]).forEach(u=>{ const usr=DB.users.find(x=>x.u===u); if(usr) sel.innerHTML+=`<option value="${esc(u)}">${esc(usr.name)}</option>`; });
-  toast('✅ ম্যানেজার নির্বাচন সফল!');
+  toast('✅ ম্যানেজার নির্বাচন সফল হয়েছে');
 }
 function removeManager(){
   if(!isOnline()){ noNetPopup(); return; }
@@ -488,7 +488,7 @@ function saveAdmMeal(){
   // saveDB() → saveMonth() → পুরো meals object overwrite (race condition)।
   saveMealEntry(_admKey, _admVal);
   invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-  toast('✅ মিল আপডেট হয়েছে!'); closeAdmPopup();
+  toast('✅ মিল আপডেট হয়েছে'); closeAdmPopup();
 }
 // Edit member
 function loadEditMem(){
@@ -1025,7 +1025,7 @@ function _doMakePDF(type){
         const appRate = isOffU ? (pdfOfRate||pm) : pm;
         const mealBill = myNetMeals * appRate;
         const sh = isOffU ? {othersShare:0,cookBillShare:0,cookFoodShare:0}
-                          : calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost);
+                          : calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
         const totalBill = mealBill + sh.othersShare + sh.cookFoodShare;
         const monthDeposits = (DB.transactions||[])
           .filter(tx => tx.uname===u.u && tx.type==='deposit' && dateInMessMonth(tx.date, mmKey))
@@ -1238,7 +1238,7 @@ function showAllMembersBill(){
   const mealBill=cu.type==='cook'?0:myNetMeals*appliedRate;
   const {othersShare,cookBillShare,cookFoodShare}=isOff
     ?{othersShare:0,cookBillShare:0,cookFoodShare:0}
-    :calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost);
+    :calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
   const totalBill=mealBill+othersShare+cookFoodShare;
 
   const prevBal=getPreBal(cu.u, mmKey);

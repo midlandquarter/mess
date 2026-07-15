@@ -140,7 +140,7 @@ function saveMeal(){
     const _mealMmKey = messMonthKey(new Date(mealDate));
     saveMealEntry(_mk,_mv,_mealMmKey);
     invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-    toast('✅ '+mealDate+' মিল সেভ!'); refreshHome(); }
+    toast('Done✅ '+mealDate+' মিল সেভ হয়েছে'); refreshHome(); }
   );
 }
 function fmtMealLine(t,q,v){
@@ -360,12 +360,17 @@ function _getMemberCounts(mmKey=null){
 // Real override of core.js stub — runs after _memberCountsCache above is declared
 function invalidateMemberCountsCache(){ _memberCountsCache = null; }
 
-function calcMemberOtherShares(u, mmKey, othersAll, cookBillsAll, cookFoodCost=0){
+function calcMemberOtherShares(u, mmKey, othersAll, cookBillsAll, cookFoodCost=0, netMeals=null){
   // ✅ FIX: বাবুর্চির নিজের কোনো share নেই
   // তাদের খাবার খরচ ইতিমধ্যে অন্য সদস্যদের cookFoodShare-এ যোগ হয়ে যায়
   if(u.type==='cook') return {othersShare:0, cookBillShare:0, cookFoodShare:0};
   // অফিস মিল ইউজারদের বাবুর্চি ও অন্যান্য খরচ বহন করতে হয় না
   if(isOfficeMealUser(u)) return {othersShare:0, cookBillShare:0, cookFoodShare:0};
+  // ✅ NEW FIX: Outsider সদস্য এই মাসে একটাও মিল না খেলে (netMeals===0)
+  // তার নামে others/cook বিল আসবে না।
+  // netMeals===null মানে caller এখনো পুরনো (parameter ছাড়া) — তখন এই skip
+  // চালু হবে না, আগের আচরণ অক্ষত থাকবে (backward-compatible)।
+  if(u.type==='outside' && netMeals===0) return {othersShare:0, cookBillShare:0, cookFoodShare:0};
   // ✅ mmKey দিয়ে — historical month-এ শুধু সেই সময়ের active members গণনা
   const {nonCookMembers, insideCount, outsideCount} = _getMemberCounts(mmKey);
 

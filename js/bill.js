@@ -37,8 +37,8 @@ function loadBill(){
   const myNetMeals=getNetMemberMeals(CU.u,mmKey);
   const mealBill=myNetMeals*pm;
 
-  // Use new split-aware calculation
-  const {othersShare,cookBillShare,cookFoodShare}=calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost);
+  // ✅ myNetMeals pass করা হলো — outsider zero-meal বিল-স্কিপ কাজ করার জন্য
+  const {othersShare,cookBillShare,cookFoodShare}=calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
 
   let netPayable, mealBillDisplay=mealBill;
   if(cu.type==='cook'){
