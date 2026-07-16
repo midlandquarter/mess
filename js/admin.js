@@ -88,22 +88,36 @@ function initAdmin(){
   renderManagerInfo();
   renderControllerList();
   initSiteNoteCard();
-  // Populate cycle delete dropdown — শুধু handoverDone মাস দেখাও
+  // Populate cycle delete dropdown
+  // ✅ FIX: আগে শুধু DB.handoverDone-এ থাকা মাস দেখাত — যে মাস কখনো
+  // হ্যান্ডওভার হয়নি (যেমন টেস্ট সাইকেল) সেটা ডিলিট করার কোনো উপায়ই
+  // ছিল না। এখন Firebase-এ আসলেই যেসব মাস আছে তার পুরো তালিকা আনা হয়
+  // (monthsRef.once('value') দিয়ে, key-গুলো শুধু)। *** currentKey সবসময়
+  // hard-filter করে বাদ — চলমান মাস কোনো অবস্থাতেই এই dropdown-এ আসবে না,
+  // deleteMessCycle()-এও আলাদাভাবে এটা guard করা আছে (defense-in-depth)। ***
   const cycSel=document.getElementById('del-cycle-sel');
   if(cycSel){
     const mnames=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
     const currentKey = messMonthKey();
-    // শুধু handoverDone মাস — current মাস বাদ (current মাস delete করা নিরাপদ না)
-    const deletable = [...(DB.handoverDone||[])].sort().reverse();
-    cycSel.innerHTML='<option value="">-- চক্র নির্বাচন --</option>';
-    deletable.forEach(key=>{
-      const {y,m}=getMessMonth(new Date(key+'-15'));
-      const nm=(m+1)%12;
-      cycSel.innerHTML+=`<option value="${key}">${mnames[m]} ১১ – ${mnames[nm]} ১০, ${y}</option>`;
+    cycSel.innerHTML='<option value="">লোড হচ্ছে...</option>';
+    monthsRef.once('value').then(snap=>{
+      const raw = snap.val()||{};
+      // *** hard filter — currentKey কখনোই deletable list-এ ঢুকবে না ***
+      const deletable = Object.keys(raw).filter(k=>k!==currentKey).sort().reverse();
+      cycSel.innerHTML='<option value="">-- চক্র নির্বাচন --</option>';
+      deletable.forEach(key=>{
+        const {y,m}=getMessMonth(new Date(key+'-15'));
+        const nm=(m+1)%12;
+        const handedOver=(DB.handoverDone||[]).includes(key);
+        cycSel.innerHTML+=`<option value="${key}">${mnames[m]} ১১ – ${mnames[nm]} ১০, ${y}${handedOver?'':' (হস্তান্তর হয়নি)'}</option>`;
+      });
+      if(!deletable.length){
+        cycSel.innerHTML='<option value="">ডিলিট করার মতো কোনো মাস নেই</option>';
+      }
+    }).catch(e=>{
+      cycSel.innerHTML='<option value="">লোড ব্যর্থ — আবার চেষ্টা করুন</option>';
+      console.error('Cycle list load error:', e);
     });
-    if(!deletable.length){
-      cycSel.innerHTML='<option value="">হস্তান্তর করা কোনো মাস নেই</option>';
-    }
     cycSel.onchange=function(){
       const prev=document.getElementById('del-cycle-preview');
       if(!this.value){ prev.style.display='none'; return; }
@@ -117,6 +131,13 @@ function deleteMessCycle(){
   if(!isOnline()){ noNetPopup(); return; }
   const key=document.getElementById('del-cycle-sel').value;
   if(!key){ toast('❌ চক্র নির্বাচন করুন!'); return; }
+  // ✅ FIX: চলমান মাস কোনোভাবেই ডিলিট করা যাবে না — dropdown-এ বাদ দেওয়া
+  // ছাড়াও এখানে সরাসরি guard (defense-in-depth), যাতে stale dropdown বা
+  // অন্য কোনো path থেকেও ভুলবশত চলমান মাস ডিলিট/reset না হয়ে যায়।
+  if(key === messMonthKey()){
+    toast('❌ চলমান মাস ডিলিট করা যাবে না!');
+    return;
+  }
   const mnames=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
   const {y,m}=getMessMonth(new Date(key+'-15'));
   const nm=(m+1)%12, ny=m===11?y+1:y;
@@ -171,7 +192,7 @@ function _calcHandoverData(mmKey){
     const mealBill=myNetMeals*appliedRate;
     const {othersShare,cookFoodShare}=isOff
       ?{othersShare:0,cookFoodShare:0}
-      :calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
+      :calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost);
     const totalBill=mealBill+othersShare+cookFoodShare;
     const prevBal=getPreBal(u.u, mmKey);
     const monthDep=(DB.transactions||[])
@@ -449,7 +470,7 @@ function setManager(){
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
   (DB.managers[month]||[]).forEach(u=>{ const usr=DB.users.find(x=>x.u===u); if(usr) sel.innerHTML+=`<option value="${esc(u)}">${esc(usr.name)}</option>`; });
-  toast('✅ ম্যানেজার নির্বাচন সফল হয়েছে');
+  toast('✅ ম্যানেজার নির্বাচন সফল!');
 }
 function removeManager(){
   if(!isOnline()){ noNetPopup(); return; }
@@ -488,7 +509,7 @@ function saveAdmMeal(){
   // saveDB() → saveMonth() → পুরো meals object overwrite (race condition)।
   saveMealEntry(_admKey, _admVal);
   invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-  toast('✅ মিল আপডেট হয়েছে'); closeAdmPopup();
+  toast('✅ মিল আপডেট হয়েছে!'); closeAdmPopup();
 }
 // Edit member
 function loadEditMem(){
@@ -1025,7 +1046,7 @@ function _doMakePDF(type){
         const appRate = isOffU ? (pdfOfRate||pm) : pm;
         const mealBill = myNetMeals * appRate;
         const sh = isOffU ? {othersShare:0,cookBillShare:0,cookFoodShare:0}
-                          : calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
+                          : calcMemberOtherShares(u,mmKey,othersAll,cookBillsAll,cookFoodCost);
         const totalBill = mealBill + sh.othersShare + sh.cookFoodShare;
         const monthDeposits = (DB.transactions||[])
           .filter(tx => tx.uname===u.u && tx.type==='deposit' && dateInMessMonth(tx.date, mmKey))
@@ -1238,7 +1259,7 @@ function showAllMembersBill(){
   const mealBill=cu.type==='cook'?0:myNetMeals*appliedRate;
   const {othersShare,cookBillShare,cookFoodShare}=isOff
     ?{othersShare:0,cookBillShare:0,cookFoodShare:0}
-    :calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
+    :calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost);
   const totalBill=mealBill+othersShare+cookFoodShare;
 
   const prevBal=getPreBal(cu.u, mmKey);
