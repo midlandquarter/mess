@@ -30,16 +30,11 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(payload => {
   const title = payload.notification?.title || payload.data?.title || 'মেস নোটিফিকেশন';
   const body  = payload.notification?.body  || payload.data?.body  || '';
-  const image = payload.notification?.image || payload.data?.image || '';
   return self.registration.showNotification(title, {
     body,
     icon : '/mess/icon-192.png',
     badge: '/mess/icon-192.png',
     vibrate: [200, 100, 200],
-    // ✅ NEW: data-only payload-এর ক্ষেত্রেও ছবি দেখাও (consistency —
-    // যদিও বর্তমান notification-payload flow-এ এই callback আসলে
-    // call-ই হয় না, উপরের comment দেখুন)
-    ...(image ? { image } : {}),
     data: { url: payload.data?.url || 'https://midlandquarter.github.io/mess/' }
   });
 });
