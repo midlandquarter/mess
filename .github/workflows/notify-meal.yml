@@ -24,7 +24,7 @@ jobs:
       - name: Send meal reminder notification
         run: |
           node .github/workflows/send_fcm.js \
-            "🍽️ মিল আপডেট করুন" \
-            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!"
+            "🍽️ আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!" \
+            "রাত ১০ টার পরে মিল চালু বা বন্ধ করা যাবে না, নির্ধারিত সময়ের মধ্যে মিল আপডেট করুন"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
