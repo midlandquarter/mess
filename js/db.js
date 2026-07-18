@@ -40,6 +40,27 @@ function _isDBReady(){
   return _dbLoaded && Array.isArray(DB.users) && DB.users.length > 0;
 }
 
+// ── ⏳ "এখনও লোড হচ্ছে" ফিডব্যাক — silent no-op-এর বদলে স্পষ্ট বার্তা ──
+// রুট কারণ: currentMonthRef.once('value') (নিচে _startListeners-এ) পুরো
+// current month-এর data (meals+bazar+others+transactions+...) একসাথে
+// নামায়। মেস মাস যত এগোয় (বেশি দিন = বেশি meal entry) এবং সদস্য যত বাড়ে,
+// এই payload তত বড় হয় — slow mobile network-এ এটা কয়েক সেকেন্ড লাগতে
+// পারে। ততক্ষণ _dbLoaded=false থাকে। কিন্তু auth.js-এর _waitUntilReady()
+// ৬ সেকেন্ডে জোর করে splash সরিয়ে home দেখিয়ে দেয় (আটকে থাকা ঠেকাতে) —
+// তখন UI প্রস্তুত দেখায় কিন্তু _dbLoaded তখনও false, তাই সব save function
+// silently কিছুই করে না। ফলে ব্যবহারকারী মনে করেন সাইট আটকে গেছে।
+// এই fix root slowness কমায় না (সেটা network+data-size নির্ভর), কিন্তু
+// অন্তত ব্যবহারকারী স্পষ্ট বুঝবেন কী হচ্ছে, বার বার ক্লিক করে বিরক্ত হবেন না।
+let _lastNotReadyToast = 0;
+function _notReadyToast(){
+  const now = Date.now();
+  if(now - _lastNotReadyToast < 2500) return; // cooldown — একই সময় একাধিক guard ট্রিগার হলেও একবারই toast
+  _lastNotReadyToast = now;
+  if(typeof toast === 'function'){
+    toast('⏳ ডেটা এখনও লোড হচ্ছে, একটু অপেক্ষা করে আবার চেষ্টা করুন...');
+  }
+}
+
 // DB ready হওয়া পর্যন্ত অপেক্ষা করে callback চালায়
 function _waitUntilReady(cb, timeoutMs=6000){
   if(_isDBReady()){ cb(); return; }
@@ -114,7 +135,7 @@ let _globalSaveTimer = null;
 let _minUserCount = 0; // Firebase থেকে আসা সর্বোচ্চ user count
 
 function saveGlobal(){
-  if(!_dbLoaded) return;
+  if(!_dbLoaded){ _notReadyToast(); return; }
   if(_globalSaveTimer) clearTimeout(_globalSaveTimer);
   _globalSaveTimer = setTimeout(()=>{
     // Dedup
@@ -153,7 +174,7 @@ function saveGlobal(){
 // manager permission denied → পুরো update fail → data হারায়।
 // শুধু addController() / removeController() / deleteMember() call করবে।
 function saveControllers(){
-  if(!_dbLoaded||!globalRef) return;
+  if(!_dbLoaded||!globalRef){ _notReadyToast(); return; }
   globalRef.child('controllers').set(DB.controllers||[]).catch(e=>{
     console.error('Controllers save:',e);
     toast('⚠️ Controllers সেভে সমস্যা!');
@@ -165,7 +186,7 @@ function saveControllers(){
 // saveGlobal()-এ রাখা যাবে না — manager call করলে permission denied → fail।
 // শুধু doMonthHandover() + deleteMonthCycle() call করবে।
 function saveHandover(){
-  if(!_dbLoaded||!globalRef) return;
+  if(!_dbLoaded||!globalRef){ _notReadyToast(); return; }
   const updates={};
   if(DB.prevBalances!==undefined) updates['prevBalances']=DB.prevBalances;
   if(DB.handoverDone !==undefined) updates['handoverDone'] =DB.handoverDone;
@@ -177,7 +198,7 @@ function saveHandover(){
 
 // ── users আলাদা save — শুধু user management-এ call হবে ──
 function saveUsers(){
-  if(!_dbLoaded) return;
+  if(!_dbLoaded){ _notReadyToast(); return; }
   const seen=new Set();
   DB.users=DB.users.filter(u=>{ if(!u.u||seen.has(u.u)) return false; seen.add(u.u); return true; });
   const _uniq=DB.users.length;
@@ -205,7 +226,7 @@ function saveUsers(){
 // Usage (outside admin.js):
 //   deleteMemberFromDB(targetUid).then(()=>{ saveUsers(); toast('✅ সদস্য মুছে ফেলা হয়েছে'); });
 function deleteMemberFromDB(uid){
-  if(!uid||!_dbLoaded) return Promise.resolve();
+  if(!uid||!_dbLoaded){ _notReadyToast(); return Promise.resolve(); }
   // ① saveUsers() guard: delete-এর পরে length কমে → guard-কে আগেই জানাও
   if(_minUserCount>0) _minUserCount--;
   // ② RTDB node cleanup — এগুলো থাকলে refresh-এ onAuthStateChanged পাস করে
@@ -229,7 +250,7 @@ function _ensureArr(val){
 }
 
 function saveMonth(){
-  if(!_dbLoaded || !currentMonthRef) return;
+  if(!_dbLoaded || !currentMonthRef){ _notReadyToast(); return; }
   if(_monthSaveTimer) clearTimeout(_monthSaveTimer);
   _monthSaveTimer = setTimeout(()=>{
     // ⚠️ RACE CONDITION FIX:
@@ -244,7 +265,7 @@ function saveMonth(){
   }, 400);
 }
 function saveMealEntry(k, v, mealMmKey){
-  if(!_dbLoaded) return;
+  if(!_dbLoaded){ _notReadyToast(); return; }
   // ✅ FIX: mealMmKey দেওয়া থাকলে সেই মাসের Firebase bucket-এ save করো।
   // Bug: আগে সবসময় currentMonthRef-এ যেত।
   // ফলে user যদি পরবর্তী মাসের জন্য আগাম meal দেয়
@@ -255,12 +276,12 @@ function saveMealEntry(k, v, mealMmKey){
   if(!targetRef) return;
   targetRef.child('meals').child(k).set(v).catch(e => console.error('Meal:', e));
 }
-function saveBazarItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('bazar').child(String(item.id)).set(item).catch(e=>console.error('Bazar:',e)); }
-function deleteBazarItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('bazar').child(String(id)).remove().catch(e=>console.error('BazarDel:',e)); }
-function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('others').child(String(item.id)).set(item).catch(e=>console.error('Others:',e)); }
-function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('others').child(String(id)).remove().catch(e=>console.error('OthersDel:',e)); }
-function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
-function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
+function saveBazarItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id){ _notReadyToast(); return; } currentMonthRef.child('bazar').child(String(item.id)).set(item).catch(e=>console.error('Bazar:',e)); }
+function deleteBazarItem(id){ if(!_dbLoaded||!currentMonthRef){ _notReadyToast(); return; } currentMonthRef.child('bazar').child(String(id)).remove().catch(e=>console.error('BazarDel:',e)); }
+function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id){ _notReadyToast(); return; } currentMonthRef.child('others').child(String(item.id)).set(item).catch(e=>console.error('Others:',e)); }
+function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef){ _notReadyToast(); return; } currentMonthRef.child('others').child(String(id)).remove().catch(e=>console.error('OthersDel:',e)); }
+function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id){ _notReadyToast(); return; } currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
+function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef){ _notReadyToast(); return; } currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
 // ✅ FIX: office-meal.js এই দুইটা function ৬ জায়গায় call করে (saveOfficeMeal,
 // saveOfficeMealNote, saveOfficeMealNoteScreen, editOfficeMealNote,
 // delOfficeMealNote), file_report.md-ও এদের db.js-এর অংশ বলে ধরে নিয়েছে —
@@ -271,8 +292,8 @@ function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonth
 // (confirmation msg না আসা), আর নোটটা Firebase-এ আসলে লেখাই হতো না
 // (তাই refresh করলে হারিয়ে যেত)। saveBazarItem/saveOtherItem/saveTxItem-এর
 // মতোই individual-path pattern।
-function saveOfficeMealNoteItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>console.error('OfficeMealNote:',e)); }
-function deleteOfficeMealNoteItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>console.error('OfficeMealNoteDel:',e)); }
+function saveOfficeMealNoteItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id){ _notReadyToast(); return; } currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>console.error('OfficeMealNote:',e)); }
+function deleteOfficeMealNoteItem(id){ if(!_dbLoaded||!currentMonthRef){ _notReadyToast(); return; } currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>console.error('OfficeMealNoteDel:',e)); }
 
 // ── Pending Approval helpers ────────────────────────────────────────────────
 // Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
@@ -338,7 +359,7 @@ function rejectPendingUser(uid){
 
 // ── saveDB() — সব পুরানো call-এর জন্য backward compatible ──
 function saveDB(){
-  if(!_dbLoaded){ console.warn('saveDB blocked: DB not yet loaded'); return; }
+  if(!_dbLoaded){ console.warn('saveDB blocked: DB not yet loaded'); _notReadyToast(); return; }
   invalidateMealIndex();
   invalidateMemberCountsCache();
   invalidateTxBalCache();
@@ -739,70 +760,4 @@ function loadDB(){
       // ✅ FIX: চলতি মেস-চক্রের শেষ দিন/রাতেই পরের চক্রের মিল দেওয়া শুরু
       // হয়ে যায় (যেমন সকালের নাস্তার জন্য আগের রাতেই এন্ট্রি লাগে) — কিন্তু
       // শুধু currentMonthRef লোড হতো, তাই পরের bucket-এর মিল Firebase-এ
-      // ঠিকই সেভ হতো কিন্তু কোথাও দেখাই যেত না। এখন পরের মাসের মিলও
-      // একইভাবে লোড ও লাইভ-সিঙ্ক করা হচ্ছে — একই DB.meals-এ merge হয়
-      // (key-তে exact তারিখ থাকে বলে দুই মাসের এন্ট্রি কখনো একে অপরকে
-      // ওভাররাইট করবে না, আলাদা meal.js/home.js ফাইল ছোঁয়ার দরকার নেই)।
-      const nextMonthRef = monthsRef.child(nextCycleKey(currentMonthKey));
-      nextMonthRef.child('meals').once('value').then(snap=>{
-        const data=snap.val();
-        if(data) Object.keys(data).forEach(k=>{ DB.meals[k]=data[k]; });
-        invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-        if(_dbLoaded) refreshHome();
-      }).catch(()=>{});
-      nextMonthRef.child('meals').on('child_added',   _handleMeal);
-      nextMonthRef.child('meals').on('child_changed', _handleMeal);
-      nextMonthRef.child('meals').on('child_removed', snap=>{
-        if(snap.key) delete DB.meals[snap.key];
-        invalidateMealIndex(); invalidateMealRateCache();
-        if(_dbLoaded) refreshHome();
-      });
-    }
-
-    // ── Page hide/show: connection manage ──
-    document.addEventListener('visibilitychange', ()=>{
-      if(document.hidden){
-        firebase.database().goOffline();
-      } else {
-        // ✅ Jitter delay: সবাই একসাথে reconnect করলে Firebase-এ spike হয়।
-        // 0–1200ms random delay — 150 user ছড়িয়ে পড়বে, connection spike কমবে।
-        const jitter = Math.floor(Math.random() * 1200);
-        setTimeout(()=>{
-          firebase.database().goOnline();
-          // meals: child_changed listener নিজেই delta ধরবে (Firebase auto-sync)
-          // bazar/others/transactions: tab active হলে fresh load
-          _reloadNonMealData();
-          _refreshActiveScreen();
-        }, jitter);
-      }
-    });
-
-    // ── Non-meal data reload (tab active হলে) ──
-    function _reloadNonMealData(){
-      if(!_dbLoaded || !currentMonthRef) return;
-      currentMonthRef.once('value').then(snap=>{
-        const data=snap.val(); if(!data) return;
-        const ARR=['bazar','others','transactions','officeMealNotes','cookBills'];
-        ARR.forEach(f=>{
-          if(data[f]!==undefined) DB[f]=_ensureArr(data[f]).sort((a,b)=>(a.id||0)-(b.id||0));
-        });
-        // mealRates, managers etc (non-meal fields, excluding meals)
-        ['managers','officeMealRates'].forEach(f=>{
-          if(data[f]!==undefined) DB[f]=data[f];
-        });
-        _clearHistCache();
-      }).catch(()=>{});
-    }
-
-    // ১০s fallback — blank screen ঠেকাতে
-    setTimeout(()=>{
-      if(!_dbLoaded){
-        _dbLoaded=true;
-        hideSplash();
-        if(CU){ refreshHome(); showSc('home'); } else { showSc('login'); }
-        toast('⚠️ সংযোগ ধীর। পুনরায় চেষ্টা করুন।');
-      }
-    }, 10000);
-  }
-}
-
+      // ঠিকই সেভ হতো কিন্তু কোথাও দেখাই যেত না। এখন পরের মাসের                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
