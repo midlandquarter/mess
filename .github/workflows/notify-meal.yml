@@ -39,9 +39,6 @@ jobs:
         run: |
           node .github/workflows/send_fcm.js \
             "🍽️ মিল আপডেট করুন" \
-            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!" \
-            "https://midlandquarter.github.io/mess/" \
-            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=720&auto=format&fit=crop"
+            "আগামী দিনের মিল এখনো update করা না হলে, এখনই update করুন!"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          

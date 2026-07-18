@@ -10,7 +10,7 @@
 //   ⑤ Invalid/expired token গুলো RTDB থেকে মুছে ফেলা (clean-up)
 //
 // Usage:
-//   node send_fcm.js "Notification Title" "Notification Body" "https://optional-url" "https://optional-image-url"
+//   node send_fcm.js "Notification Title" "Notification Body" "https://optional-url"
 // ═══════════════════════════════════════════════════════════════════
 const admin = require('firebase-admin');
 
@@ -18,9 +18,6 @@ const admin = require('firebase-admin');
 const title = process.argv[2] || 'মেস নোটিফিকেশন';
 const body  = process.argv[3] || '';
 const link  = process.argv[4] || 'https://midlandquarter.github.io/mess/';
-// ✅ NEW: বড় ছবি সহ notification (BigPicture style) — না দিলে আগের মতোই
-// শুধু text-based notification যাবে, কিছু ভাঙবে না।
-const image = process.argv[5] || '';
 
 // Service account JSON — GitHub Secret থেকে আসে
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -53,7 +50,6 @@ console.log(`📡 Project: ${projectId}`);
 console.log(`📡 Database: ${databaseURL}`);
 console.log(`📢 Title: "${title}"`);
 console.log(`📢 Body:  "${body}"`);
-console.log(`🖼️  Image: ${image || '(none)'}`);
 
 // Firebase Admin initialize
 admin.initializeApp({
@@ -130,9 +126,6 @@ async function sendNotifications() {
         notification: {
           title,
           body,
-          // ✅ NEW: top-level fallback-এর জন্য ছবি — field নাম imageUrl
-          // (Firebase Admin SDK-এর Notification type অনুযায়ী)
-          ...(image ? { imageUrl: image } : {}),
         },
         webpush: {
           notification: {
@@ -142,9 +135,6 @@ async function sendNotifications() {
             badge: 'https://midlandquarter.github.io/mess/icon-192.png',
             vibrate: [200, 100, 200],
             requireInteraction: false,
-            // ✅ NEW: BigPicture-style বড় ছবি — field নাম image
-            // (Web Notification API options অনুযায়ী, imageUrl না)
-            ...(image ? { image } : {}),
           },
           fcm_options: {
             link,
@@ -197,4 +187,3 @@ sendNotifications().catch(err => {
   console.error('❌ Fatal error:', err.message || err);
   process.exit(1);
 });
-    
