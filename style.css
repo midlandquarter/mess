@@ -264,6 +264,7 @@ html.dark-mode{background:#0f0f1a;color:#f1f5f9;}
   font-size:11px;text-align:center;margin-top:8px;overflow:hidden;
 }
 .amb-grid2{background:rgba(0,0,0,.12);margin-top:6px;}
+.amb-grid4{grid-template-columns:1fr 1fr 1fr 1fr;}
 .dark-mode .amb-grid{background:rgba(255,255,255,.06);}
 .dark-mode .amb-grid2{background:rgba(255,255,255,.04);}
 .amb-cell{padding:9px 6px;}
