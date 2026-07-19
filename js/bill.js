@@ -10,7 +10,8 @@
 //   utils.js   → messMonthKey(), messMonthLabel(), getPreBal(), dateInMessMonth()
 //   core.js    → isOfficeMealUser(), getOfficeMealRate()
 //   meal.js    → calcMealRate(), messMonthMeals(), getNetMemberMeals(),
-//                calcMemberOtherShares(), getShortfallMeals()
+//                calcMemberOtherShares(), getShortfallMeals(),
+//                getMemberFeastShare()
 //
 // Exposes (global, called from ui.js + db.js):
 //   loadBill()
@@ -18,7 +19,8 @@
 // HTML DOM targets (sc-bill screen):
 //   #bill-month-label, #bill-month-sub
 //   #bl-rate-big, #bl-total-exp, #bl-bazar-s, #bl-others-s, #bl-meals-s
-//   #bl-my-meals, #bl-meal-bill, #bl-other-share, #bl-cook-food-share
+//   #bl-my-meals, #bl-meal-bill, #bl-other-share, #bl-cook-food-share,
+//   #bl-feast-share
 //   #bl-cook-share, #bl-my-bill, #bl-balance, #bl-net
 // ═══════════════════════════════════════════════
 
@@ -31,7 +33,7 @@ function loadBill(){
   const sub=document.getElementById('bill-month-sub');
   if(lbl) lbl.textContent='মিল রেট — '+messMonthLabel();
   if(sub) sub.textContent=messMonthLabel();
-  const {bazar,others,othersAll,cookBillsTotal,cookBillsAll,total,totalMeals,cookMeals,officeMeals,netMeals,M,C,R,X,r1,pm,cookFoodCost}=calcMealRate(mmKey);
+  const {bazar,others,othersAll,cookBillsTotal,cookBillsAll,total,totalMeals,cookMeals,officeMeals,netMeals,M,C,R,X,r1,pm,cookFoodCost,feastEntries}=calcMealRate(mmKey);
   const cu=DB.users.find(x=>x.u===CU.u)||CU;
   const myMeals=messMonthMeals(CU.u,mmKey);
   const myNetMeals=getNetMemberMeals(CU.u,mmKey);
@@ -39,28 +41,31 @@ function loadBill(){
 
   // ✅ myNetMeals pass করা হলো — outsider zero-meal বিল-স্কিপ কাজ করার জন্য
   const {othersShare,cookBillShare,cookFoodShare}=calcMemberOtherShares(cu,mmKey,othersAll,cookBillsAll,cookFoodCost,myNetMeals);
+  // ফিস্ট মিল: office সদস্যও ঢোকে (others/cookFood-এর মতো isOfficeMealUser skip নেই),
+  // শুধু বাবুর্চি বাদ — getMemberFeastShare() নিজেই cook হলে 0 দেয়
+  const feastShare=getMemberFeastShare(cu, feastEntries);
 
   let netPayable, mealBillDisplay=mealBill;
   if(cu.type==='cook'){
     // ✅ FIX: বাবুর্চির নিজের bill নেই।
     // তাদের খাবার খরচ ইতিমধ্যে cookFoodCost (CB) হিসেবে অন্য
     // সদস্যদের মধ্যে ভাগ হয়ে যায়। তাই cook-কে আলাদা bill দিলে
-    // double counting হয়।
+    // double counting হয়। ফিস্ট মিলেও বাবুর্চি সম্পূর্ণ বাদ।
     mealBillDisplay = 0;
     netPayable = 0;
   } else if(isOfficeMealUser(cu)){
     const ofRate=getOfficeMealRate(mmKey);
     mealBillDisplay=myNetMeals*ofRate;
-    netPayable=mealBillDisplay; // no misc for office
+    netPayable=mealBillDisplay+feastShare; // misc নেই, কিন্তু ফিস্ট মিল আছে
   } else {
-    netPayable=mealBill+othersShare+cookBillShare+cookFoodShare;
+    netPayable=mealBill+othersShare+cookBillShare+cookFoodShare+feastShare;
   }
   const bal=getPreBal(cu.u,mmKey)+(()=>{const d=(DB.transactions||[]).filter(tx=>tx.uname===CU.u&&tx.type==='deposit'&&dateInMessMonth(tx.date,mmKey)).reduce((s,tx)=>s+(tx.amount||0),0);const w=(DB.transactions||[]).filter(tx=>tx.uname===CU.u&&tx.type==='withdraw'&&dateInMessMonth(tx.date,mmKey)).reduce((s,tx)=>s+(tx.amount||0),0);return d-w;})();
   const net=bal-netPayable;
 
   const displayRate=isOfficeMealUser(cu)?getOfficeMealRate(mmKey):pm;
   document.getElementById('bl-rate-big').textContent='৳ '+displayRate.toFixed(2);
-  document.getElementById('bl-total-exp').textContent='৳ '+total.toLocaleString();
+  document.getElementById('bl-total-exp').textContent='৳ '+(total+(feastTotal||0)).toLocaleString();
   document.getElementById('bl-bazar-s').textContent='৳ '+bazar.toLocaleString();
   document.getElementById('bl-others-s').textContent='৳ '+(others+cookBillsTotal).toLocaleString();
   // নেট মিল দেখাও (বাবুর্চি বাদে)
@@ -69,6 +74,7 @@ function loadBill(){
   document.getElementById('bl-meal-bill').textContent='৳ '+mealBillDisplay.toFixed(2);
   document.getElementById('bl-other-share').textContent='৳ '+othersShare.toFixed(2);
   document.getElementById('bl-cook-food-share').textContent='৳ '+(cookFoodShare||0).toFixed(2);
+  document.getElementById('bl-feast-share').textContent='৳ '+(feastShare||0).toFixed(2);
   document.getElementById('bl-cook-share').textContent='৳ '+cookBillShare.toFixed(2);
   document.getElementById('bl-my-bill').textContent='৳ '+netPayable.toFixed(2);
   document.getElementById('bl-balance').textContent='৳ '+bal.toLocaleString();

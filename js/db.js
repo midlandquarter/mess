@@ -9,6 +9,27 @@
 let _dbLoaded = false; // Guard: Firebase load না হওয়া পর্যন্ত save block
 let _loadDBStarted = false; // Guard: loadDB() একবারের বেশি চলতে দেবো না
 
+// ✅ FIX (2026-07): meals-এর উপর child_added/child_changed listener প্রথমবার
+// attach হওয়ার সময় Firebase সেই মাসের প্রতিটা আগে থেকে থাকা মিল-এন্ট্রির জন্য
+// retroactively fire করে (এটা Firebase RTDB-এর normal/documented আচরণ, নতুন
+// entry-র জন্য না শুধু — attach মুহূর্তে থাকা সব existing child-এর জন্যও)।
+// ~২০০ সদস্যের মাসে এটা হাজার হাজার বার হতে পারে। প্রতিবার refreshHome()
+// সরাসরি (undebounced) কল করলে প্রতিটাতেই পুরো meal-index rebuild + পুরো
+// হোম-স্ক্রিন recalculation চলত — লগইনের পরপরই main thread কয়েক সেকেন্ডের
+// জন্য পুরোপুরি ব্লক (UI দেখা যায় কিন্তু ক্লিক কাজ করে না, ৬-৭ সেকেন্ড lag)।
+// সমাধান: refreshHome()-কে debounce — burst থামার ১৫০ms পর মাত্র একবার
+// চালানো হয়, হাজারবারের বদলে। DB.meals আপডেট আর cache invalidation (সস্তা)
+// প্রতিটা event-এই সিঙ্ক্রোনাসভাবেই হয় (অপরিবর্তিত) — শুধু ভারী
+// refreshHome()-টাই batched।
+let _homeRefreshTimer = null;
+function _scheduleHomeRefresh(){
+  if(_homeRefreshTimer) clearTimeout(_homeRefreshTimer);
+  _homeRefreshTimer = setTimeout(()=>{
+    _homeRefreshTimer = null;
+    refreshHome();
+  }, 150);
+}
+
 // ── Collision-safe ID generator ──────────────────────────────────
 // Date.now() এ একই millisecond-এ দুটো item → same ID → overwrite।
 // Date.now() * 10000 + 4-digit random → collision practically impossible।
@@ -259,6 +280,20 @@ function saveBazarItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return
 function deleteBazarItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('bazar').child(String(id)).remove().catch(e=>console.error('BazarDel:',e)); }
 function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('others').child(String(item.id)).set(item).catch(e=>console.error('Others:',e)); }
 function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('others').child(String(id)).remove().catch(e=>console.error('OthersDel:',e)); }
+function saveFeastItem(item){
+  if(!_dbLoaded||!currentMonthRef||!item?.id) return;
+  currentMonthRef.child('feastMeals').child(String(item.id)).set(item).catch(e=>{
+    console.error('Feast:',e);
+    toast('❌ ফিস্ট মিল Firebase-এ সেভ ব্যর্থ: '+(e.message||e.code||e));
+  });
+}
+function deleteFeastItem(id){
+  if(!_dbLoaded||!currentMonthRef) return;
+  currentMonthRef.child('feastMeals').child(String(id)).remove().catch(e=>{
+    console.error('FeastDel:',e);
+    toast('❌ ফিস্ট মিল Firebase থেকে মুছতে ব্যর্থ: '+(e.message||e.code||e));
+  });
+}
 function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
 function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
 // ✅ FIX: office-meal.js এই দুইটা function ৬ জায়গায় call করে (saveOfficeMeal,
@@ -369,6 +404,7 @@ function migrateDB(){
   if(!DB.cookBills) DB.cookBills=[];
   if(!DB.officeMealRates) DB.officeMealRates={};
   if(!DB.officeMealNotes) DB.officeMealNotes=[];
+  if(!DB.feastMeals) DB.feastMeals=[];
   if(!DB.users) DB.users=[];
   if(!DB.bazar) DB.bazar=[];
   if(!DB.managers) DB.managers={};
@@ -476,7 +512,7 @@ function _runMigration(callback){
     // ── Month buckets ──
     const buckets={};
     function bkt(mmKey){
-      if(!buckets[mmKey]) buckets[mmKey]={meals:{},bazar:[],others:[],transactions:[],managers:{},mealRates:{},officeMealRates:{},officeMealNotes:[],cookBills:[]};
+      if(!buckets[mmKey]) buckets[mmKey]={meals:{},bazar:[],others:[],transactions:[],managers:{},mealRates:{},officeMealRates:{},officeMealNotes:[],cookBills:[],feastMeals:[]};
       return buckets[mmKey];
     }
 
@@ -696,7 +732,7 @@ function loadDB(){
     currentMonthRef.once('value').then(snap=>{
       const data=snap.val();
       if(data){
-        const ARR=['bazar','others','transactions','officeMealNotes','cookBills'];
+        const ARR=['bazar','others','transactions','officeMealNotes','cookBills','feastMeals'];
         MONTH_FIELDS.forEach(f=>{
           if(data[f]===undefined) return;
           if(ARR.includes(f)){
@@ -717,7 +753,7 @@ function loadDB(){
     currentMonthRef.child('mealRates').on('value', snap=>{
       const v=snap.val(); if(v!==null) DB.mealRates=v;
       invalidateMealRateCache();
-      if(_dbLoaded) refreshHome();
+      if(_dbLoaded) _scheduleHomeRefresh();
     });
 
     // ── Meal real-time: child_added + child_changed ──
@@ -727,14 +763,14 @@ function loadDB(){
         const key=snap.key, val=snap.val();
         if(key && val){ DB.meals[key]=val; }
         invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-        if(_dbLoaded) refreshHome();
+        if(_dbLoaded) _scheduleHomeRefresh();
       };
       currentMonthRef.child('meals').on('child_added',   _handleMeal);
       currentMonthRef.child('meals').on('child_changed', _handleMeal);
       currentMonthRef.child('meals').on('child_removed', snap=>{
         if(snap.key) delete DB.meals[snap.key];
         invalidateMealIndex(); invalidateMealRateCache();
-        if(_dbLoaded) refreshHome();
+        if(_dbLoaded) _scheduleHomeRefresh();
       });
       // ✅ FIX: চলতি মেস-চক্রের শেষ দিন/রাতেই পরের চক্রের মিল দেওয়া শুরু
       // হয়ে যায় (যেমন সকালের নাস্তার জন্য আগের রাতেই এন্ট্রি লাগে) — কিন্তু
@@ -748,14 +784,14 @@ function loadDB(){
         const data=snap.val();
         if(data) Object.keys(data).forEach(k=>{ DB.meals[k]=data[k]; });
         invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-        if(_dbLoaded) refreshHome();
+        if(_dbLoaded) _scheduleHomeRefresh();
       }).catch(()=>{});
       nextMonthRef.child('meals').on('child_added',   _handleMeal);
       nextMonthRef.child('meals').on('child_changed', _handleMeal);
       nextMonthRef.child('meals').on('child_removed', snap=>{
         if(snap.key) delete DB.meals[snap.key];
         invalidateMealIndex(); invalidateMealRateCache();
-        if(_dbLoaded) refreshHome();
+        if(_dbLoaded) _scheduleHomeRefresh();
       });
     }
 
@@ -782,7 +818,7 @@ function loadDB(){
       if(!_dbLoaded || !currentMonthRef) return;
       currentMonthRef.once('value').then(snap=>{
         const data=snap.val(); if(!data) return;
-        const ARR=['bazar','others','transactions','officeMealNotes','cookBills'];
+        const ARR=['bazar','others','transactions','officeMealNotes','cookBills','feastMeals'];
         ARR.forEach(f=>{
           if(data[f]!==undefined) DB[f]=_ensureArr(data[f]).sort((a,b)=>(a.id||0)-(b.id||0));
         });

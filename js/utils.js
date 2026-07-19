@@ -210,7 +210,7 @@ function _swapAndRender(hist, renderFn){
   // (e.g. {"1780489892497": {id,desc,amount,...}})।
   // hist[f] সরাসরি DB[f]-এ রাখলে .filter()/.map() crash করে।
   // _ensureArr() → Array.isArray check করে, object হলে Object.values() দেয়।
-  const _HIST_ARR = new Set(['bazar','others','transactions','cookBills']);
+  const _HIST_ARR = new Set(['bazar','others','transactions','cookBills','feastMeals']);
   MONTH_FIELDS.forEach(f=>{
     if(!hist[f]){
       // data নেই — সঠিক default দাও
@@ -281,7 +281,7 @@ function _withMonthData(mmKey, loadingEl, renderFn, forceRefresh=false){
 // BENGALI DAY NAME HELPERS
 // বাংলা বার সংক্ষেপ: রবি / সোম / মঙ্গল / বুধ / বৃহঃ / শুক্র / শনি
 // ═══════════════════════════════════════════════
-const BANGLA_DAYS_SHORT = ['রবি', 'সোম', 'মঙ্গল', 'বুধ', 'বৃহঃ', 'শুক্র', 'শনি'];
+const BANGLA_DAYS_SHORT = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
 
 function getBengaliDayAbbr(dateStr){
   if(!dateStr) return '';

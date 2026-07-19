@@ -21,6 +21,7 @@ let DB = {
   notice: {text:'', popupEnabled:false},
   officeMealRates:{},  // {"YYYY-MM": rate}  — আলাদা রেট
   officeMealNotes:[],  // [{id,date,text,by}]  — নোট ইতিহাস
+  feastMeals:[],  // NEW: ফিস্ট মিল [{id,date,slot:'b'|'l'|'d',amount,by}] — সাধারণ বাজার/মিল রেট থেকে আলাদা
 };
 let CU = null;
 let admBuf = {};
@@ -46,7 +47,7 @@ firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 const dbRef     = database.ref('messData');        // migration/fallback only
 const globalRef  = database.ref('messData/global');  // users, cfg, controllers, notice, siteNote, rules, shortfall, prevBalances, handoverDone
-const monthsRef  = database.ref('messData/months');  // per-mess-month: meals, bazar, others, transactions, managers, mealRates, officeMealRates, officeMealNotes, cookBills
+const monthsRef  = database.ref('messData/months');  // per-mess-month: meals, bazar, others, transactions, managers, mealRates, officeMealRates, officeMealNotes, cookBills, feastMeals
 let currentMonthRef = null;
 let currentMonthKey = '';
 
@@ -58,6 +59,6 @@ let currentMonthKey = '';
 // rules        → feature বাদ দেওয়া হয়েছে
 // উপরেরগুলো GLOBAL_FIELDS-এ থাকলে manager-এর saveGlobal() call fail করে → data হারায়।
 const GLOBAL_FIELDS = ['users','cfg','siteNote','notice','shortfall'];
-const MONTH_FIELDS  = ['meals','bazar','others','transactions','managers','mealRates','officeMealRates','officeMealNotes','cookBills'];
+const MONTH_FIELDS  = ['meals','bazar','others','transactions','managers','mealRates','officeMealRates','officeMealNotes','cookBills','feastMeals'];
 
 const auth = firebase.auth();
