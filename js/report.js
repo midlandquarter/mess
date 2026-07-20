@@ -243,7 +243,7 @@ function _doMakePDF(type){
         <thead><tr style="background:#1a6b3c;color:#fff;">
           <th style="padding:7px 6px;text-align:left;">Name / ID</th>
           <th style="padding:7px 4px;text-align:center;">Type</th>
-          <th style="padding:7px 4px;text-align:right;">Prev Balance</th>
+          <th style="padding:7px 4px;text-align:right;">Prev. Balance</th>
           <th style="padding:7px 4px;text-align:right;">Deposit</th>
           <th style="padding:7px 4px;text-align:right;">Total Balance</th>
           <th style="padding:7px 4px;text-align:right;">Meals</th>
@@ -252,9 +252,9 @@ function _doMakePDF(type){
           <th style="padding:7px 4px;text-align:right;">Meal Bill</th>
           <th style="padding:7px 4px;text-align:right;">Others</th>
           <th style="padding:7px 4px;text-align:right;">Cook</th>
-          <th style="padding:7px 4px;text-align:right;">Feast M.</th>
+          <th style="padding:7px 4px;text-align:right;">Feast M. Bill</th>
           <th style="padding:7px 4px;text-align:right;">Total Bill</th>
-          <th style="padding:7px 6px;text-align:right;">Net</th>
+          <th style="padding:7px 6px;text-align:right;">Net Balance</th>
         </tr></thead><tbody>`;
 
       sortedUsers.forEach((u,ri)=>{
