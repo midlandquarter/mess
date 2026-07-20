@@ -66,8 +66,12 @@ self.addEventListener('notificationclick', event => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'mq-v12'; // v12: Firebase Messaging added
-const SHELL_ASSETS = [
+const CACHE_VERSION = 'mq-v13'; // v13: app JS/CSS auto-discovered from index.html + pre-cached (background, on install) — যাতে update-toast এর reload-এর সময় network-এর অপেক্ষা করতে না হয়, দুর্বল নেটেও ফাস্ট
+// এই ৮টাই সত্যিকারের "static" — index.html-এর script/link ট্যাগ থেকে discover করা যায় না,
+// তাই এগুলোই একমাত্র hardcoded থাকবে। বাকি সব JS/CSS নিচে _discoverLocalAssets()-এ
+// index.html পড়ে নিজে থেকেই বের করা হয় — নতুন js ফাইল ভবিষ্যতে যোগ হলে (যেটা index.html-এ
+// <script src="..."> লিখতেই হবে, ব্যবহার করতে হলে) sw.js এখানে ছোঁয়া লাগবে না।
+const BASE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
@@ -88,12 +92,33 @@ const EXTERNAL_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js',
 ];
 
+// index.html নিজে fetch করে তার <script src="...js"> আর <link href="...css">
+// থেকে local (non-CDN) ফাইলগুলোর path বের করে — এটাই SHELL_ASSETS-এর dynamic অংশ।
+// fetch fail করলে খালি array ফেরত দেয় (fail-safe — তখন শুধু BASE_ASSETS cache হবে,
+// বাকি JS/CSS আগের মতোই lazy/tier-3 caching-এ চলবে, এর চেয়ে খারাপ কিছু হবে না)।
+async function _discoverLocalAssets(){
+  try{
+    const res = await fetch('./index.html');
+    const html = await res.text();
+    const srcs = [...html.matchAll(/<script[^>]+src=["']([^"']+\.js)["']/g)].map(m => m[1]);
+    const hrefs = [...html.matchAll(/<link[^>]+href=["']([^"']+\.css)["']/g)].map(m => m[1]);
+    return [...new Set([...srcs, ...hrefs])]
+      .filter(u => !/^https?:\/\//.test(u))
+      .map(u => './' + u.replace(/^\.?\//, ''));
+  }catch(err){
+    console.warn('[SW] Asset auto-discovery failed, falling back to BASE_ASSETS only:', err);
+    return [];
+  }
+}
+
 // ── Install: সব asset pre-cache ─────────────────────
 self.addEventListener('install', event => {
   console.log('[SW] Installing:', CACHE_VERSION);
   event.waitUntil(
-    caches.open(CACHE_VERSION).then(cache => {
-      const shellP = SHELL_ASSETS.map(url =>
+    caches.open(CACHE_VERSION).then(async cache => {
+      const discovered = await _discoverLocalAssets();
+      const shellAssets = [...new Set([...BASE_ASSETS, ...discovered])];
+      const shellP = shellAssets.map(url =>
         cache.add(url).catch(err => console.warn('[SW] Shell miss:', url, err))
       );
       const extP = EXTERNAL_ASSETS.map(url =>
