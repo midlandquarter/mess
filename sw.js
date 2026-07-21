@@ -113,19 +113,27 @@ async function _discoverLocalAssets(){
 
 // ── Install: সব asset pre-cache ─────────────────────
 self.addEventListener('install', event => {
-  console.log('[SW] Installing:', CACHE_VERSION);
+  // ✅ FIX: প্রথমবার install (কোনো আগের active SW নেই) হলে page নিজেই তখন
+  // এই একই ফাইলগুলো normal ভাবে লোড করছে — SW-ও যদি সেই মুহূর্তে একই ফাইল
+  // আবার fetch করতে যায়, দুইটা network-এ একসাথে লড়াই করবে, দুর্বল নেটে
+  // প্রথম-visit ধীর হয়ে যাবে। তাই প্রথমবার শুধু হালকা BASE_ASSETS নেওয়া হয়
+  // (বাকি ফাইল এমনিতেই lazy/tier-3 caching-এ চলে আসবে, ডাবল-ফেচ ছাড়াই)।
+  // আসল আপডেটের সময় (self.registration.active সত্য — মানে পুরনো SW তখনও
+  // চলছে, page cache থেকেই ফাস্ট) পুরো ভারী pre-cache নিরাপদে background-এ হয়।
+  const isUpdate = !!self.registration.active;
+  console.log('[SW] Installing:', CACHE_VERSION, isUpdate ? '(আপডেট)' : '(প্রথম ইনস্টল)');
   event.waitUntil(
     caches.open(CACHE_VERSION).then(async cache => {
-      const discovered = await _discoverLocalAssets();
+      const discovered = isUpdate ? await _discoverLocalAssets() : [];
       const shellAssets = [...new Set([...BASE_ASSETS, ...discovered])];
       const shellP = shellAssets.map(url =>
         cache.add(url).catch(err => console.warn('[SW] Shell miss:', url, err))
       );
-      const extP = EXTERNAL_ASSETS.map(url =>
+      const extP = isUpdate ? EXTERNAL_ASSETS.map(url =>
         fetch(url, { mode: 'no-cors' })
           .then(res => cache.put(url, res))
           .catch(err => console.warn('[SW] Ext miss:', url, err))
-      );
+      ) : [];
       return Promise.allSettled([...shellP, ...extP]);
     })
   );
