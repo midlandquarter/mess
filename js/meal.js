@@ -380,11 +380,26 @@ let _memberCountsCache = null;
 function _getMemberCounts(mmKey=null){
   // mmKey দিলে সেই মাসের active members ফিল্টার করো (cache bypass)
   if(!mmKey && _memberCountsCache) return _memberCountsCache;
-  const nonCookMembers = DB.users.filter(x=>
+  let nonCookMembers = DB.users.filter(x=>
     x.type!=='cook' &&
     !isOfficeMealUser(x) &&
     (!mmKey || isActiveInMonth(x, mmKey))
   );
+  // ✅ FIX (2026-07-30): calcMemberOtherShares()-এ outside সদস্য netMeals===0
+  // হলে তার others/cookFood বিল বাদ যায় (ইচ্ছাকৃত) — কিন্তু সে headcount-এ
+  // থেকে যেত বলে বাকিদের ভাগের হর (denominator) অপরিবর্তিত থেকে যেত, ফলে
+  // তার ভাগের টাকাটা কারো নামেই না উঠে হারিয়ে যেত (real data-তে ৳221.65/
+  // মাস ধরা পড়েছে, 2026-07 cycle — ৫ জন শূন্য-মিল outside সদস্যের কারণে)।
+  // এখন mmKey থাকলে তাদের headcount থেকেই বাদ, যাতে তাদের ভাগ বাকি
+  // (মিল-খাওয়া) সদস্যদের মধ্যে একই outside50/equal নিয়মেই পুনর্বণ্টন হয় —
+  // মেসের কোনো ক্ষতি হিসেবে না গিয়ে।
+  if(mmKey){
+    nonCookMembers = nonCookMembers.filter(x=>{
+      if(x.type!=='outside') return true;
+      const net = messMonthMeals(x.u, mmKey) + getShortfallMeals(x.u, mmKey);
+      return net > 0;
+    });
+  }
   const insideCount  = nonCookMembers.filter(x=>x.type==='inside').length;
   const outsideCount = nonCookMembers.filter(x=>x.type==='outside').length;
   const result = {nonCookMembers, insideCount, outsideCount};
