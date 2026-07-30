@@ -1370,6 +1370,14 @@ if ('serviceWorker' in navigator) {
             }
           });
         });
+
+        // ✅ FIX (2026-07-30): হোম স্ক্রিন থেকে installed PWA খুললে অনেক সময়
+        // ব্রাউজার আগের tab-ই resume করে — নতুন 'load' event ফায়ার হয় না,
+        // তাই উপরের update চেক-ও হয় না। app আবার visible/foreground হলে
+        // আলাদা করে update চেক করলে এই gap বন্ধ হয়।
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update();
+        });
       })
       .catch(err => console.log('SW error:', err));
 
