@@ -33,12 +33,18 @@ function validEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length<
 function validPass(s){ return s && s.length>=6 && s.length<=100; }
 function validUsername(s){ return s && /^[a-zA-Z0-9_\-\.]{3,30}$/.test(s); }
 function validAmount(v){ return !isNaN(v) && v > 0 && v < 10000000; }
-function sanitizeInput(s){
+function sanitizeInput(s, maxLen){
   // ✅ FIX BUG-06: শুধু trim ও length-limit।
   // HTML encoding এখানে করলে render-এর সময় esc() দিয়ে double-encode হয়:
   // "&" → "&amp;" (storage) → "&amp;amp;" (display) → user দেখে "&amp;"
   // HTML encoding সম্পূর্ণভাবে render layer-এর দায়িত্ব: esc() বা safeHTML()।
-  return String(s||'').trim().slice(0,200);
+  //
+  // ✅ FIX BUG-07: hard-coded 200 ছিল সব caller-এর জন্য এক সাইজ —
+  // ফলে multi-line বাজার লিস্ট (>200 char) মাঝপথে কেটে যেত (দেখুন bazar.js)।
+  // এখন caller প্রয়োজনে maxLen পাঠাতে পারে; না দিলে আগের মতোই 200
+  // (name/room/mobile/job/site-note ইত্যাদি ছোট ফিল্ডের জন্য অপরিবর্তিত)।
+  const limit = (typeof maxLen === 'number' && maxLen > 0) ? maxLen : 200;
+  return String(s||'').trim().slice(0, limit);
 }
 
 

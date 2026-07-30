@@ -67,7 +67,7 @@ function initBazar(){
 function addBazar(){
   if(!isOnline()){ noNetPopup(); return; }
   const descEl=document.getElementById('bz-desc');
-  const desc=sanitizeInput(descEl.value);
+  const desc=sanitizeInput(descEl.value, 2000);
   const amount=parseFloat(document.getElementById('bz-amt').value);
   const date=V('bz-date');
   if(!desc||desc.length<2){ toast('❌ বিবরণ দিন!'); return; }
@@ -133,14 +133,14 @@ function editBazar(id){
   const {minDate,maxDate}=getMessCycleBounds(itemMmKey);
   const html=`<div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">বিবরণ</label>
-    <input id="edit-bz-desc" class="form-input" value="${esc(b.desc)}" style="margin-top:4px"></div>
+    <textarea id="edit-bz-desc" class="form-input" rows="4" style="margin-top:4px;resize:vertical;line-height:1.5">${esc(b.desc)}</textarea></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">পরিমাণ ৳</label>
     <input id="edit-bz-amt" type="number" class="form-input" value="${b.amount}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">তারিখ</label>
     <input id="edit-bz-date" type="date" class="form-input" value="${esc(b.date)}" min="${minDate}" max="${maxDate}" style="margin-top:4px"></div>
   </div>`;
   showModal('বাজার সম্পাদনা', html, ()=>{
-    const desc=sanitizeInput(document.getElementById('edit-bz-desc').value);
+    const desc=sanitizeInput(document.getElementById('edit-bz-desc').value, 2000);
     const amount=parseFloat(document.getElementById('edit-bz-amt').value);
     const date=document.getElementById('edit-bz-date').value;
     if(!desc||desc.length<2){ toast('❌ বিবরণ দিন!'); return; }
