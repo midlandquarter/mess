@@ -23,7 +23,7 @@ function switchOthTab(tab){ /* বাবুর্চি বিল tab সরা�
 function addOther(){
   if(!isOnline()){ noNetPopup(); return; }
   const descEl=document.getElementById('oth-desc');
-  const desc=sanitizeInput(descEl.value);
+  const desc=sanitizeInput(descEl.value, 2000);
   const amount=parseFloat(document.getElementById('oth-amt').value);
   const date=V('oth-date');
   const split=document.getElementById('oth-split').value||'equal';
@@ -85,7 +85,7 @@ function editOther(id){
   const {minDate,maxDate}=getMessCycleBounds(itemMmKey);
   const html=`<div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">বিবরণ</label>
-    <input id="edit-oth-desc" class="form-input" value="${esc(o.desc)}" style="margin-top:4px"></div>
+    <textarea id="edit-oth-desc" class="form-input" rows="4" style="margin-top:4px;resize:vertical;line-height:1.5">${esc(o.desc)}</textarea></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">পরিমাণ ৳</label>
     <input id="edit-oth-amt" type="number" class="form-input" value="${o.amount}" style="margin-top:4px"></div>
     <div><label style="font-size:12px;font-weight:600;color:var(--text-light)">তারিখ</label>
@@ -97,7 +97,7 @@ function editOther(id){
     </select></div>
   </div>`;
   showModal('অন্যান্য খরচ সম্পাদনা', html, ()=>{
-    const desc=sanitizeInput(document.getElementById('edit-oth-desc').value);
+    const desc=sanitizeInput(document.getElementById('edit-oth-desc').value, 2000);
     const amount=parseFloat(document.getElementById('edit-oth-amt').value);
     const date=document.getElementById('edit-oth-date').value;
     const split=document.getElementById('edit-oth-split').value;
