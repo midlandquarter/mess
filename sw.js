@@ -23,37 +23,26 @@ if (!firebase.apps.length) {
 
 const messaging = firebase.messaging();
 
-// ✅ Background message handler:
-// FCM payload-এ 'notification' field থাকলে browser নিজেই notification দেখায়
-// এই callback শুধু 'data'-only payload-এর জন্য call হয়
+// Background message handler:
+// FCM payload-এ 'notification' field থাকলে এই callback call হয় না —
+// FCM SDK নিজেই notification দেখায়।
+// শুধু 'data'-only payload-এর জন্য এটা দরকার।
 messaging.onBackgroundMessage(payload => {
-  console.log('[sw.js] Received background message:', payload);
-  
   const title = payload.notification?.title || payload.data?.title || 'মেস নোটিফিকেশন';
   const body  = payload.notification?.body  || payload.data?.body  || '';
-  const icon  = '/mess/icon-192.png';
-  const link  = payload.fcm_options?.link || payload.data?.url || 'https://midlandquarter.github.io/mess/';
-
-  const notificationOptions = {
-    body: body,
-    icon: icon,
-    badge: icon,
+  return self.registration.showNotification(title, {
+    body,
+    icon : '/mess/icon-192.png',
+    badge: '/mess/icon-192.png',
     vibrate: [200, 100, 200],
-    data: { url: link },
-    requireInteraction: false,
-    tag: 'meal-reminder' // একই notification বার বার আসবে না
-  };
-
-  return self.registration.showNotification(title, notificationOptions);
+    data: { url: payload.data?.url || 'https://midlandquarter.github.io/mess/' }
+  });
 });
 
-// ✅ Notification-এ tap করলে app খুলবে
+// Notification-এ tap করলে app খুলবে
 self.addEventListener('notificationclick', event => {
-  console.log('[sw.js] Notification clicked:', event.notification.title);
   event.notification.close();
-  
   const target = event.notification.data?.url || 'https://midlandquarter.github.io/mess/';
-  
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       // App ইতিমধ্যে খোলা থাকলে focus করো
@@ -66,12 +55,10 @@ self.addEventListener('notificationclick', event => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'mq-v13'; // v13: app JS/CSS auto-discovered from index.html + pre-cached (background, on install) — যাতে update-toast এর reload-এর সময় network-এর অপেক্ষা করতে না হয়, দুর্বল নেটেও ফাস্ট
-// এই ৮টাই সত্যিকারের "static" — index.html-এর script/link ট্যাগ থেকে discover করা যায় না,
-// তাই এগুলোই একমাত্র hardcoded থাকবে। বাকি সব JS/CSS নিচে _discoverLocalAssets()-এ
-// index.html পড়ে নিজে থেকেই বের করা হয় — নতুন js ফাইল ভবিষ্যতে যোগ হলে (যেটা index.html-এ
-// <script src="..."> লিখতেই হবে, ব্যবহার করতে হলে) sw.js এখানে ছোঁয়া লাগবে না।
-const BASE_ASSETS = [
+
+const CACHE_VERSION = 'mq-v12'; // v12: Firebase Messaging added
+
+const SHELL_ASSETS = [
   './',
   './index.html',
   './manifest.json',
@@ -86,54 +73,24 @@ const EXTERNAL_ASSETS = [
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js',
 ];
 
-// index.html নিজে fetch করে তার <script src="...js"> আর <link href="...css">
-// থেকে local (non-CDN) ফাইলগুলোর path বের করে — এটাই SHELL_ASSETS-এর dynamic অংশ।
-// fetch fail করলে খালি array ফেরত দেয় (fail-safe — তখন শুধু BASE_ASSETS cache হবে,
-// বাকি JS/CSS আগের মতোই lazy/tier-3 caching-এ চলবে, এর চেয়ে খারাপ কিছু হবে না)।
-async function _discoverLocalAssets(){
-  try{
-    const res = await fetch('./index.html');
-    const html = await res.text();
-    const srcs = [...html.matchAll(/<script[^>]+src=["']([^"']+\.js)["']/g)].map(m => m[1]);
-    const hrefs = [...html.matchAll(/<link[^>]+href=["']([^"']+\.css)["']/g)].map(m => m[1]);
-    return [...new Set([...srcs, ...hrefs])]
-      .filter(u => !/^https?:\/\//.test(u))
-      .map(u => './' + u.replace(/^\.?\//, ''));
-  }catch(err){
-    console.warn('[SW] Asset auto-discovery failed, falling back to BASE_ASSETS only:', err);
-    return [];
-  }
-}
-
 // ── Install: সব asset pre-cache ─────────────────────
 self.addEventListener('install', event => {
-  // ✅ FIX: প্রথমবার install (কোনো আগের active SW নেই) হলে page নিজেই তখন
-  // এই একই ফাইলগুলো normal ভাবে লোড করছে — SW-ও যদি সেই মুহূর্তে একই ফাইল
-  // আবার fetch করতে যায়, দুইটা network-এ একসাথে লড়াই করবে, দুর্বল নেটে
-  // প্রথম-visit ধীর হয়ে যাবে। তাই প্রথমবার শুধু হালকা BASE_ASSETS নেওয়া হয়
-  // (বাকি ফাইল এমনিতেই lazy/tier-3 caching-এ চলে আসবে, ডাবল-ফেচ ছাড়াই)।
-  // আসল আপডেটের সময় (self.registration.active সত্য — মানে পুরনো SW তখনও
-  // চলছে, page cache থেকেই ফাস্ট) পুরো ভারী pre-cache নিরাপদে background-এ হয়।
-  const isUpdate = !!self.registration.active;
-  console.log('[SW] Installing:', CACHE_VERSION, isUpdate ? '(আপডেট)' : '(প্রথম ইনস্টল)');
+  console.log('[SW] Installing:', CACHE_VERSION);
   event.waitUntil(
-    caches.open(CACHE_VERSION).then(async cache => {
-      const discovered = isUpdate ? await _discoverLocalAssets() : [];
-      const shellAssets = [...new Set([...BASE_ASSETS, ...discovered])];
-      const shellP = shellAssets.map(url =>
+    caches.open(CACHE_VERSION).then(cache => {
+      const shellP = SHELL_ASSETS.map(url =>
         cache.add(url).catch(err => console.warn('[SW] Shell miss:', url, err))
       );
-      const extP = isUpdate ? EXTERNAL_ASSETS.map(url =>
+      const extP = EXTERNAL_ASSETS.map(url =>
         fetch(url, { mode: 'no-cors' })
           .then(res => cache.put(url, res))
           .catch(err => console.warn('[SW] Ext miss:', url, err))
-      ) : [];
+      );
       return Promise.allSettled([...shellP, ...extP]);
     })
   );
