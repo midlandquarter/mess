@@ -66,12 +66,7 @@ self.addEventListener('notificationclick', event => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'mq-v15'; // v15: app code (html/js/css) আবার cache-first — তাই সবসময়
-// instant লোড, নেট যত ধীরই হোক। background refresh fetch-এ no-store ব্যবহার হয়, তাই
-// GitHub Pages-এর cache-header ফাঁকি দিয়ে সবসময় সত্যিকারের latest bytes আসে — deploy-এর
-// ঠিক পরের লোডে হয়তো এক ধাপ পুরনো, তার পরের লোড থেকেই latest। (v14-এর network-first+
-// timeout race বাদ দেওয়া হলো — first-install-এ cache miss + slow নেট একসাথে হলে page
-// চিরস্থায়ী hang হয়ে যাওয়ার একটা edge-case বাগ ছিল ওই লজিকে)
+const CACHE_VERSION = 'mq-v13'; // v13: app JS/CSS auto-discovered from index.html + pre-cached (background, on install) — যাতে update-toast এর reload-এর সময় network-এর অপেক্ষা করতে না হয়, দুর্বল নেটেও ফাস্ট
 // এই ৮টাই সত্যিকারের "static" — index.html-এর script/link ট্যাগ থেকে discover করা যায় না,
 // তাই এগুলোই একমাত্র hardcoded থাকবে। বাকি সব JS/CSS নিচে _discoverLocalAssets()-এ
 // index.html পড়ে নিজে থেকেই বের করা হয় — নতুন js ফাইল ভবিষ্যতে যোগ হলে (যেটা index.html-এ
@@ -159,18 +154,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// ── Fetch: 4-tier strategy ───────────────────────────
-// ✅ FIX (2026-07-30): আগে "App shell" tier (index.html সহ সব local JS/CSS)
-// cache-first ছিল — deploy হওয়ার পরেও প্রথম লোডে পুরোনো cached কোডই
-// দেখাত, শুধু background-এ পরের বারের জন্য cache আপডেট হতো। sw.js নিজে
-// অপরিবর্তিত থাকলে (যেমন শুধু meal.js বদলালে) SW lifecycle/update-toast
-// কখনো trigger-ই হতো না — তাই Chrome-এ install করা PWA পুরোনো হিসাব
-// দেখাতেই থাকত (Kiwi ব্রাউজারে ঠিক দেখাচ্ছিল কারণ ওর SW handling আলাদা)।
-// সমাধান: local কোড ফাইল (html/js/css) এখন NETWORK-FIRST, ছোট timeout
-// race দিয়ে — ভালো নেটে সবসময় একদম latest কোড আসবে, কোনো version-bump/
-// hard-refresh ছাড়াই। দুর্বল নেট/অফলাইনে timeout-এর পর cache থেকে
-// ফলব্যাক করে, তাই লোড কখনো আটকে থাকবে না। আইকন/ম্যানিফেস্টের মতো
-// সত্যিকারের static asset আগের মতোই cache-first (এগুলো কখনো বদলায় না)।
+// ── Fetch: 3-tier strategy ───────────────────────────
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET') return;
@@ -179,7 +163,7 @@ self.addEventListener('fetch', event => {
   const networkOnly = ['firebaseio.com', 'firebaseapp.com', 'googleapis.com'];
   if (networkOnly.some(d => url.hostname.includes(d))) return;
 
-  // 2️⃣ Firebase SDK + CDN + Fonts (URL-এ version pinned, কখনো বদলায় না) → CACHE FIRST
+  // 2️⃣ Firebase SDK + CDN + Fonts → CACHE FIRST (instant)
   const cacheFirst = ['gstatic.com', 'cdnjs.cloudflare.com', 'fonts.gstatic.com'];
   if (cacheFirst.some(d => url.hostname.includes(d))) {
     event.respondWith(
@@ -194,33 +178,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 3️⃣ App কোড (navigation + html/js/css) → CACHE FIRST (instant) + no-store ব্যাকগ্রাউন্ড রিফ্রেশ
-  // মূল সমস্যাটা network-first দিয়ে সমাধান না করে root cause-এ ফিক্স করা হলো: background
-  // fetch আগে প্লেইন fetch() ব্যবহার করত, তাই GitHub Pages-এর HTTP cache-header মেনে
-  // প্রায়ই পুরনো bytes-ই আবার cache হতো। এখন no-store দিয়ে সেই cache বাইপাস করা হয়।
-  const isNavigation = event.request.mode === 'navigate';
-  const isAppCode = isNavigation || /\.(js|css|html)(\?|$)/.test(url.pathname) ||
-                     url.pathname === '/' || url.pathname.endsWith('/');
-  if (isAppCode) {
-    event.respondWith(
-      caches.match(event.request).then(cached => {
-        const freshReq = new Request(event.request, { cache: 'no-store' });
-        const networkFetch = fetch(freshReq).then(res => {
-          if (res && res.status === 200 && res.type !== 'opaque') {
-            caches.open(CACHE_VERSION).then(c => c.put(event.request, res.clone()));
-          }
-          return res;
-        }).catch(() => cached || Response.error());
-
-        // Cache আছে → সাথে সাথে দেখাও (background-এ latest fetch করে cache আপডেট করি)
-        // Cache নেই (প্রথমবার ইনস্টল) → network-এর জন্য অপেক্ষা করা ছাড়া উপায় নেই
-        return cached || networkFetch;
-      })
-    );
-    return;
-  }
-
-  // 4️⃣ বাকি static asset (icon, manifest, favicon) → CACHE FIRST + background update
+  // 3️⃣ App shell (index.html, icons) → CACHE FIRST + background update
+  // Cache থেকে তাৎক্ষণিক দেখাও, background-এ নতুন version fetch করো
   event.respondWith(
     caches.match(event.request).then(cached => {
       const networkFetch = fetch(event.request).then(res => {
@@ -236,4 +195,3 @@ self.addEventListener('fetch', event => {
     })
   );
 });
-
