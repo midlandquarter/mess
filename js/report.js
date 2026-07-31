@@ -72,35 +72,35 @@ function _doLoadReport(mmKey){
         <div style="font-size:12px;opacity:.8;margin-top:2px">মোট খরচ</div>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1px;background:rgba(255,255,255,0.2);border-radius:10px;overflow:hidden;margin-bottom:8px">
-      <div class="hero-cell" style="padding:10px;text-align:center">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.2);border-radius:10px;overflow:hidden;margin-bottom:8px">
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
         <div style="font-size:15px;font-weight:700">৳${bazar.toLocaleString()}</div>
         <div style="font-size:10px;opacity:.8;margin-top:2px">বাজার</div>
       </div>
-      <div class="hero-cell" style="padding:10px;text-align:center">
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
         <div style="font-size:15px;font-weight:700">৳${others.toLocaleString()}</div>
         <div style="font-size:10px;opacity:.8;margin-top:2px">অন্যান্য</div>
       </div>
-      <div class="hero-cell" style="padding:10px;text-align:center">
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
         <div style="font-size:15px;font-weight:700">৳${(cookFoodCost||0).toFixed(0)}</div>
         <div style="font-size:10px;opacity:.8;margin-top:2px">বাবুর্চি বিল</div>
       </div>
-      <div class="hero-cell" style="padding:10px;text-align:center">
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
         <div style="font-size:15px;font-weight:700">৳${(feastTotal||0).toLocaleString()}</div>
         <div style="font-size:10px;opacity:.8;margin-top:2px">Feast Meal বিল</div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:rgba(255,255,255,0.2);border-radius:10px;overflow:hidden">
-      <div class="hero-cell" style="padding:10px;text-align:center">
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
         <div style="font-size:16px;font-weight:700">${(R||netMeals).toFixed(2)}</div>
         <div style="font-size:10px;opacity:.8;margin-top:2px">নেট মিল (সবার)</div>
       </div>
-      <div class="hero-cell" style="padding:10px;text-align:center">
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
         <div style="font-size:16px;font-weight:700;color:#fcd34d">${cookMeals.toFixed(2)}</div>
         <div style="font-size:10px;opacity:.8;margin-top:2px">বাবুর্চির মিল</div>
       </div>
-      <div class="hero-cell" style="padding:10px;text-align:center">
-        <div style="font-size:12px;font-weight:700;color:#7dd3fc">MEPL+MPCL</div>
+      <div class="hero-cell" style="padding:10px 6px;text-align:center">
+        <div style="font-size:11px;font-weight:700;color:#7dd3fc">MEPL+MPCL</div>
         <div style="font-size:13px;font-weight:700;color:#7dd3fc">${officeMeals.toFixed(1)}মিল</div>
         <div style="font-size:12px;font-weight:700;color:#7dd3fc">৳${officeMealBill.toFixed(0)}</div>
       </div>
@@ -252,7 +252,7 @@ function _doMakePDF(type){
           <th style="padding:7px 4px;text-align:right;">Meal Bill</th>
           <th style="padding:7px 4px;text-align:right;">Others</th>
           <th style="padding:7px 4px;text-align:right;">Cook</th>
-          <th style="padding:7px 4px;text-align:right;">Feast M. Bill</th>
+          <th style="padding:7px 4px;text-align:right;">Feast Meal Bill</th>
           <th style="padding:7px 4px;text-align:right;">Total Bill</th>
           <th style="padding:7px 6px;text-align:right;">Net Balance</th>
         </tr></thead><tbody>`;
