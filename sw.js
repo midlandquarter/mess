@@ -66,9 +66,12 @@ self.addEventListener('notificationclick', event => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'mq-v14'; // v14: local app code (html/js/css) এখন network-first+timeout — শুধু app-logic ফাইল
-// বদলালে (sw.js নিজে অক্ষত থাকলেও) পরের লোডেই latest কোড আসবে, SW lifecycle/version-bump-এর
-// উপর নির্ভর করতে হবে না। দুর্বল নেটে/অফলাইনে timeout-এর পর আগের মতোই cache থেকে ফলব্যাক করে।
+const CACHE_VERSION = 'mq-v15'; // v15: app code (html/js/css) আবার cache-first — তাই সবসময়
+// instant লোড, নেট যত ধীরই হোক। background refresh fetch-এ no-store ব্যবহার হয়, তাই
+// GitHub Pages-এর cache-header ফাঁকি দিয়ে সবসময় সত্যিকারের latest bytes আসে — deploy-এর
+// ঠিক পরের লোডে হয়তো এক ধাপ পুরনো, তার পরের লোড থেকেই latest। (v14-এর network-first+
+// timeout race বাদ দেওয়া হলো — first-install-এ cache miss + slow নেট একসাথে হলে page
+// চিরস্থায়ী hang হয়ে যাওয়ার একটা edge-case বাগ ছিল ওই লজিকে)
 // এই ৮টাই সত্যিকারের "static" — index.html-এর script/link ট্যাগ থেকে discover করা যায় না,
 // তাই এগুলোই একমাত্র hardcoded থাকবে। বাকি সব JS/CSS নিচে _discoverLocalAssets()-এ
 // index.html পড়ে নিজে থেকেই বের করা হয় — নতুন js ফাইল ভবিষ্যতে যোগ হলে (যেটা index.html-এ
@@ -191,12 +194,29 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 3️⃣ App কোড (navigation + html/js/css) → NETWORK FIRST, timeout হলে cache fallback
+  // 3️⃣ App কোড (navigation + html/js/css) → CACHE FIRST (instant) + no-store ব্যাকগ্রাউন্ড রিফ্রেশ
+  // মূল সমস্যাটা network-first দিয়ে সমাধান না করে root cause-এ ফিক্স করা হলো: background
+  // fetch আগে প্লেইন fetch() ব্যবহার করত, তাই GitHub Pages-এর HTTP cache-header মেনে
+  // প্রায়ই পুরনো bytes-ই আবার cache হতো। এখন no-store দিয়ে সেই cache বাইপাস করা হয়।
   const isNavigation = event.request.mode === 'navigate';
   const isAppCode = isNavigation || /\.(js|css|html)(\?|$)/.test(url.pathname) ||
                      url.pathname === '/' || url.pathname.endsWith('/');
   if (isAppCode) {
-    event.respondWith(_networkFirstWithTimeout(event.request, 3000));
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        const freshReq = new Request(event.request, { cache: 'no-store' });
+        const networkFetch = fetch(freshReq).then(res => {
+          if (res && res.status === 200 && res.type !== 'opaque') {
+            caches.open(CACHE_VERSION).then(c => c.put(event.request, res.clone()));
+          }
+          return res;
+        }).catch(() => cached || Response.error());
+
+        // Cache আছে → সাথে সাথে দেখাও (background-এ latest fetch করে cache আপডেট করি)
+        // Cache নেই (প্রথমবার ইনস্টল) → network-এর জন্য অপেক্ষা করা ছাড়া উপায় নেই
+        return cached || networkFetch;
+      })
+    );
     return;
   }
 
@@ -216,47 +236,4 @@ self.addEventListener('fetch', event => {
     })
   );
 });
-
-// নেটওয়ার্ক আগে চেষ্টা করে (browser HTTP cache বাইপাস করে, no-store দিয়ে —
-// যাতে GitHub Pages-এর নিজের cache-header-এর কারণে পুরোনো ফাইল না আসে)।
-// timeoutMs-এর মধ্যে সাড়া না পেলে, বা fetch fail করলে, SW-এর নিজের
-// cache (Cache Storage) থেকে ফলব্যাক করে। Network দেরিতে সাড়া দিলেও
-// (timeout-এর পরে হলেও) cache আপডেট করে রাখে, যাতে পরের লোড আরও ফ্রেশ হয়।
-function _networkFirstWithTimeout(request, timeoutMs) {
-  return new Promise(resolve => {
-    let settled = false;
-    const freshReq = new Request(request, { cache: 'no-store' });
-
-    const toCache = res => {
-      if (res && res.status === 200 && res.type !== 'opaque') {
-        caches.open(CACHE_VERSION).then(c => c.put(request, res.clone()));
-      }
-    };
-
-    const timer = setTimeout(() => {
-      if (settled) return;
-      caches.match(request).then(cached => {
-        if (settled) return;
-        settled = true;
-        if (cached) resolve(cached);
-        // cache-ও না থাকলে নিচের network promise (এখনও চলছে) resolve করবে
-      });
-    }, timeoutMs);
-
-    fetch(freshReq).then(res => {
-      toCache(res);
-      if (settled) return; // দেরিতে এসেছে — cache আপডেট হয়ে গেছে, আর resolve লাগবে না
-      settled = true;
-      clearTimeout(timer);
-      resolve(res);
-    }).catch(() => {
-      if (settled) return;
-      clearTimeout(timer);
-      caches.match(request).then(cached => {
-        settled = true;
-        resolve(cached || Response.error());
-      });
-    });
-  });
-}
 
