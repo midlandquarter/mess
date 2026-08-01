@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
 
       - name: Install Firebase Admin SDK
-        run: npm install firebase-admin
+        run: npm install firebase-admin @firebase/app
 
       - name: Send meal reminder notification
         run: |
