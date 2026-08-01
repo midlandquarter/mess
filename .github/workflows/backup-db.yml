@@ -1,0 +1,44 @@
+# ═══════════════════════════════════════════════════════════════════
+# .github/workflows/backup-db.yml
+# ─────────────────────────────────────────────────────────────────
+# প্রতি সপ্তাহে Realtime Database-এর পুরো backup export করে
+# Google Drive-এর একটা নির্দিষ্ট folder-এ (তোমার নিজের Drive) upload করে।
+#
+# চালানোর আগে যা লাগবে (বিস্তারিত ধাপ চ্যাটে দেওয়া আছে):
+#   ① Google Cloud Console-এ এই project-এর জন্য Drive API enable করা
+#   ② Drive-এ একটা folder বানিয়ে, সেটা service account-এর email-এর
+#      সাথে "Editor" হিসেবে share করা
+#   ③ সেই folder-এর ID "DRIVE_FOLDER_ID" নামে GitHub secret হিসেবে যোগ করা
+#      (FIREBASE_SERVICE_ACCOUNT আগে থেকেই আছে, নতুন কিছু লাগবে না)
+#
+# Bangladesh = UTC+6 → প্রতি শুক্রবার রাত ২:০০ BD = বৃহস্পতিবার UTC 20:00
+# ═══════════════════════════════════════════════════════════════════
+
+name: Weekly Database Backup
+
+on:
+  schedule:
+    - cron: '0 20 * * 4'   # প্রতি শুক্রবার রাত ২টা (BD সময়)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install firebase-admin @firebase/app googleapis
+
+      - name: Export database and upload to Drive
+        run: node .github/workflows/backup_db.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
