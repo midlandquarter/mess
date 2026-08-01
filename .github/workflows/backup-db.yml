@@ -1,7 +1,8 @@
 # ═══════════════════════════════════════════════════════════════════
 # .github/workflows/backup-db.yml
 # ─────────────────────────────────────────────────────────────────
-# প্রতি সপ্তাহে Realtime Database backup করে নিজের Google Drive-এ upload করে।
+# প্রতিদিন রাত ১১:৪৫ (BD সময়) Realtime Database backup করে নিজের Google
+# Drive-এ upload করে।
 # Upload হয় নিজের Google account (OAuth) দিয়ে — service account দিয়ে না,
 # কারণ personal Gmail-এ service account সরাসরি ফাইল আপলোড করতে পারে না।
 #
@@ -12,14 +13,14 @@
 #   GOOGLE_CLIENT_SECRET       (নতুন)
 #   GOOGLE_REFRESH_TOKEN       (নতুন)
 #
-# Bangladesh = UTC+6 → প্রতি শুক্রবার রাত ২:০০ BD = বৃহস্পতিবার UTC 20:00
+# Bangladesh = UTC+6 → প্রতিদিন রাত ১১:৪৫ BD = একই দিন UTC 17:45
 # ═══════════════════════════════════════════════════════════════════
 
-name: Weekly Database Backup
+name: Daily Database Backup
 
 on:
   schedule:
-    - cron: '0 20 * * 4'   # প্রতি শুক্রবার রাত ২টা (BD সময়)
+    - cron: '45 17 * * *'   # প্রতিদিন রাত ১১:৪৫ (BD সময়)
   workflow_dispatch:
 
 jobs:

@@ -92,8 +92,13 @@ async function uploadToDrive(localPath) {
 
   const drive = google.drive({ version: 'v3', auth: oAuth2Client });
 
-  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const fileName = `mess-backup-${date}.json`;
+  // BD সময় হিসেবে date বানানো হচ্ছে (runner UTC-তে চলে, তাই +6 ঘন্টা যোগ করা লাগে —
+  // নাহলে রাত ১২টার পরের run-এ আগের দিনের date বসে যেত)
+  const bd = new Date(Date.now() + 6 * 60 * 60 * 1000); // BD = UTC+6
+  const dd = String(bd.getUTCDate()).padStart(2, '0');
+  const mm = String(bd.getUTCMonth() + 1).padStart(2, '0');
+  const yy = String(bd.getUTCFullYear()).slice(-2);
+  const fileName = `${dd}-${mm}-${yy}_mess-backup.json`;
 
   console.log(`📤 Google Drive-এ upload করা হচ্ছে: ${fileName}`);
   const res = await drive.files.create({
