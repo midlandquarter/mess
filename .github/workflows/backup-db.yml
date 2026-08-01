@@ -1,15 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════
 # .github/workflows/backup-db.yml
 # ─────────────────────────────────────────────────────────────────
-# প্রতি সপ্তাহে Realtime Database-এর পুরো backup export করে
-# Google Drive-এর একটা নির্দিষ্ট folder-এ (তোমার নিজের Drive) upload করে।
+# প্রতি সপ্তাহে Realtime Database backup করে নিজের Google Drive-এ upload করে।
+# Upload হয় নিজের Google account (OAuth) দিয়ে — service account দিয়ে না,
+# কারণ personal Gmail-এ service account সরাসরি ফাইল আপলোড করতে পারে না।
 #
-# চালানোর আগে যা লাগবে (বিস্তারিত ধাপ চ্যাটে দেওয়া আছে):
-#   ① Google Cloud Console-এ এই project-এর জন্য Drive API enable করা
-#   ② Drive-এ একটা folder বানিয়ে, সেটা service account-এর email-এর
-#      সাথে "Editor" হিসেবে share করা
-#   ③ সেই folder-এর ID "DRIVE_FOLDER_ID" নামে GitHub secret হিসেবে যোগ করা
-#      (FIREBASE_SERVICE_ACCOUNT আগে থেকেই আছে, নতুন কিছু লাগবে না)
+# লাগবে এই GitHub Secrets (setup ধাপ চ্যাটে দেওয়া আছে):
+#   FIREBASE_SERVICE_ACCOUNT   (আগে থেকেই আছে)
+#   DRIVE_FOLDER_ID            (আগে থেকেই আছে)
+#   GOOGLE_CLIENT_ID           (নতুন)
+#   GOOGLE_CLIENT_SECRET       (নতুন)
+#   GOOGLE_REFRESH_TOKEN       (নতুন)
 #
 # Bangladesh = UTC+6 → প্রতি শুক্রবার রাত ২:০০ BD = বৃহস্পতিবার UTC 20:00
 # ═══════════════════════════════════════════════════════════════════
@@ -42,3 +43,6 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}

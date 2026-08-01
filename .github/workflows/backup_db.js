@@ -3,32 +3,40 @@
 // ─────────────────────────────────────────────────────────────────
 // GitHub Action থেকে call হয়।
 // কাজ:
-//   ① FIREBASE_SERVICE_ACCOUNT env থেকে service account JSON পড়া
-//   ② পুরো Realtime Database (root থেকে) JSON আকারে export করা
-//   ③ একই service account দিয়ে Google Drive-এর নির্দিষ্ট folder-এ upload করা
+//   ① FIREBASE_SERVICE_ACCOUNT দিয়ে পুরো Realtime Database export করা
+//   ② নিজের Google account-এর OAuth token দিয়ে Drive-এ upload করা
+//      (service account দিয়ে না — personal/Gmail account-এ service
+//      account-এর নিজস্ব storage quota থাকে না, তাই সরাসরি ফাইল
+//      তৈরি করতে পারে না, folder share করা থাকলেও না)
 //
-// লাগবে (দুটোই GitHub Secrets থেকে আসে):
-//   - FIREBASE_SERVICE_ACCOUNT  (আগে থেকেই আছে)
-//   - DRIVE_FOLDER_ID           (backup যে Drive folder-এ যাবে)
-//
-// শর্ত:
-//   - সেই Drive folder service account-এর email-কে "Editor" হিসেবে share করা থাকতে হবে
-//   - Google Cloud project-এ Google Drive API enabled থাকতে হবে
+// লাগবে (সবগুলো GitHub Secrets থেকে):
+//   - FIREBASE_SERVICE_ACCOUNT
+//   - DRIVE_FOLDER_ID
+//   - GOOGLE_CLIENT_ID
+//   - GOOGLE_CLIENT_SECRET
+//   - GOOGLE_REFRESH_TOKEN
 // ═══════════════════════════════════════════════════════════════════
 const admin = require('firebase-admin');
 const { google } = require('googleapis');
 const fs = require('fs');
 
 const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
-const folderId = process.env.DRIVE_FOLDER_ID;
+const folderId     = process.env.DRIVE_FOLDER_ID;
+const clientId      = process.env.GOOGLE_CLIENT_ID;
+const clientSecret  = process.env.GOOGLE_CLIENT_SECRET;
+const refreshToken  = process.env.GOOGLE_REFRESH_TOKEN;
 
-if (!serviceAccountJson) {
-  console.error('❌ FIREBASE_SERVICE_ACCOUNT environment variable not set.');
-  process.exit(1);
-}
-if (!folderId) {
-  console.error('❌ DRIVE_FOLDER_ID environment variable not set.');
-  process.exit(1);
+for (const [name, val] of Object.entries({
+  FIREBASE_SERVICE_ACCOUNT: serviceAccountJson,
+  DRIVE_FOLDER_ID: folderId,
+  GOOGLE_CLIENT_ID: clientId,
+  GOOGLE_CLIENT_SECRET: clientSecret,
+  GOOGLE_REFRESH_TOKEN: refreshToken,
+})) {
+  if (!val) {
+    console.error(`❌ ${name} environment variable not set.`);
+    process.exit(1);
+  }
 }
 
 let serviceAccount;
@@ -38,8 +46,6 @@ try {
   console.error('❌ FIREBASE_SERVICE_ACCOUNT is not valid JSON:', e.message);
   process.exit(1);
 }
-
-// private_key-এ literal newlines থাকলে \n দিয়ে replace করো
 if (serviceAccount.private_key) {
   serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 }
@@ -63,7 +69,6 @@ admin.initializeApp({
 async function exportDatabase() {
   const db = admin.database();
 
-  // 30s timeout — hang করে workflow আটকে থাকবে না
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Timed out reading database (30s)')), 30000)
   );
@@ -81,11 +86,11 @@ async function exportDatabase() {
 }
 
 async function uploadToDrive(localPath) {
-  const auth = new google.auth.GoogleAuth({
-    credentials: serviceAccount,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
-  });
-  const drive = google.drive({ version: 'v3', auth });
+  // নিজের Google account হিসেবে upload — service account হিসেবে না
+  const oAuth2Client = new google.auth.OAuth2(clientId, clientSecret);
+  oAuth2Client.setCredentials({ refresh_token: refreshToken });
+
+  const drive = google.drive({ version: 'v3', auth: oAuth2Client });
 
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const fileName = `mess-backup-${date}.json`;
