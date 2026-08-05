@@ -418,21 +418,35 @@ function renderManagerInfo(){
   }
 }
 // ✅ SHARED HELPER — uid থাকলে সরাসরি, না থাকলে Firebase-এ খুঁজে role update করো
+// ✅ FIX (2026-08): roles/{uid} আর users/{uid}/role — দুইটা আলাদা, independent
+// .set() call ছিল, দুটোই শুধু console.warn করত ব্যর্থ হলে। roles/{uid}-ই আসল
+// permission source (Firebase rules বাজার/লেনদেন/managers write এটাই চেক
+// করে) — এটা fail করলেও UI-তে কোনো ইঙ্গিত ছিল না, ফলে সমস্যা বহুদিন চাপা
+// থেকে যেত (যেমন রফিকুলের ক্ষেত্রে)। এখন দুটো write-ই Promise.all দিয়ে
+// track হয় এবং যেকোনোটা fail করলে সাথে সাথেই toast দেখানো হয়, যিনি
+// assign করছেন তিনি তখনই বুঝতে পারবেন আবার চেষ্টা করতে হবে।
 function syncRole(uname, role){
   const u = DB.users.find(x=>x.u===uname);
   const doUpdate = uid => {
-    firebase.database().ref('roles/'+uid).set({role}).catch(e=>console.warn('syncRole roles:',e));
-    firebase.database().ref('users/'+uid+'/role').set(role).catch(e=>console.warn('syncRole users:',e));
+    Promise.all([
+      firebase.database().ref('roles/'+uid).set({role}),
+      firebase.database().ref('users/'+uid+'/role').set(role)
+    ]).catch(e=>{
+      console.error('syncRole failed for',uname,'→',role,':',e);
+      toast('❌ '+(u?.name||uname)+' এর role Firebase-এ সেভ ব্যর্থ! আবার চেষ্টা করুন — নাহলে পারমিশন সমস্যা থেকে যাবে।');
+    });
   };
   if(u?.uid){
     doUpdate(u.uid);
   } else {
     firebase.database().ref('users').once('value', snap=>{
+      let found=false;
       snap.forEach(child=>{
         const d=child.val();
-        if(d&&(d.u===uname||d.mobile===uname||child.key===uname)) doUpdate(child.key);
+        if(d&&(d.u===uname||d.mobile===uname||child.key===uname)){ found=true; doUpdate(child.key); }
       });
-    }).catch(()=>{});
+      if(!found){ console.warn('syncRole: uid not found for',uname); toast('❌ '+uname+' এর জন্য uid পাওয়া যায়নি — role sync ব্যর্থ!'); }
+    }).catch(e=>{ console.error('syncRole lookup failed:',e); toast('❌ role sync ব্যর্থ (uid lookup): '+(e.message||e)); });
   }
 }
 
@@ -444,7 +458,12 @@ function setManager(){
   if(DB.managers[month].length>=10){ toast('❌ সর্বোচ্চ ১০ জন ম্যানেজার রাখা যাবে!'); return; }
   if(!DB.managers[month].includes(uname)) DB.managers[month].push(uname);
   const u=DB.users.find(x=>x.u===uname);
-  if(u && u.role==='member'){ u.role='manager'; syncRole(uname,'manager'); }
+  // ✅ FIX (2026-08): আগে শুধু u.role==='member' হলেই sync হতো — local
+  // কপি কোনো কারণে stale/ভুল দেখালে (যেমন আগে থেকেই 'manager' মনে হচ্ছে
+  // কিন্তু roles/{uid} আসলে 'member') sync-ই স্কিপ হয়ে যেত, array-তে যোগ
+  // হওয়া সত্ত্বেও। এখন controller ছাড়া সবার জন্য প্রতিবার sync হবে —
+  // idempotent, ক্ষতি নেই, কিন্তু drift permanently আটকে যাওয়া বন্ধ হলো।
+  if(u && u.role!=='controller'){ u.role='manager'; syncRole(uname,'manager'); }
   // ✅ FIX: saveDB() বাদ — targeted saves। managers=month data, users=global।
   // saveDB() → saveMonth() পুরো month array overwrite করত (race condition)।
   currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
@@ -460,7 +479,10 @@ function removeManager(){
   if(!month||!uname){ toast('❌ ম্যানেজার নির্বাচন করুন!'); return; }
   if(DB.managers[month]) DB.managers[month]=DB.managers[month].filter(u=>u!==uname);
   const u=DB.users.find(x=>x.u===uname);
-  if(u && u.role==='manager'){ u.role='member'; syncRole(uname,'member'); }
+  // ✅ FIX (2026-08): setManager()-এর মতো একই কারণে — শুধু u.role==='manager'
+  // থাকলে demote হতো, stale হলে skip। এখন controller ছাড়া সবাই সবসময়
+  // demote হবে, তাই removed manager-এর হাতে ভুলবশত write access থেকে যাবে না।
+  if(u && u.role!=='controller'){ u.role='member'; syncRole(uname,'member'); }
   // ✅ FIX: targeted saves — managers path + global only
   currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
   saveGlobal(); saveUsers(); renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');

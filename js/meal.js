@@ -291,21 +291,27 @@ function invalidateMealRateCache(){ _mealRateCache = {}; }
 // ═══════════════════════════════════════════════
 // FEAST MEAL (ফিস্ট মিল) — বাজার/মিল রেট হিসাব থেকে সম্পূর্ণ আলাদা
 // ভাগ হয় মিল-ইউনিট অনুপাতে (headcount না), শুধু সেই date+slot-এ যাদের
-// মিল 'off' ছিল না তাদের মধ্যে। বাবুর্চি সম্পূর্ণ বাদ — না হিসাবে ঢোকে,
-// না ভাগ পায়।
+// মিল 'off' ছিল না তাদের মধ্যে।
+// ✅ FIX (2026-08-05): রেট এখন বাবুর্চি সহ সবার মোট ইউনিট দিয়ে বের হয়
+// (আগে বাবুর্চি বাদ দিয়ে হতো, ফলে বাবুর্চির অংশটা বাকিদের রেটে চুপচাপ
+// মিশে যেত)। বাবুর্চির নিজের ইউনিট আলাদা রাখা হয় যাতে তার সমমূল্যের
+// টাকাটা (rate×cookUnits) সরাসরি cookFoodCost-এ যোগ করে, নিয়মিত মিলের
+// বাবুর্চি-খরচের মতোই Inside/Outside ওজন অনুযায়ী পুনর্বণ্টন করা যায় —
+// বাবুর্চি নিজে এখনও কিছু বিল পায় না (getMemberFeastShare-এ অপরিবর্তিত)।
 // ═══════════════════════════════════════════════
 function _feastSlotUnits(dateStr, slot){
-  // সেই তারিখ+বেলায় (b/l/d) বাবুর্চি বাদে সবার মোট মিল-ইউনিট
-  // (P/Q উভয়ই ইউনিট হিসেবে সমান, শুধু qty গোনা হয়; off বাদ)
-  let units=0;
+  // সেই তারিখ+বেলায় (b/l/d) সবার মোট মিল-ইউনিট (বাবুর্চি সহ), আর
+  // বাবুর্চির নিজের ইউনিট আলাদা করে — দুটোই লাগবে rate আর cookShare বের করতে
+  let units=0, cookUnits=0;
   DB.users.forEach(u=>{
-    if(u.type==='cook') return;
     const meal=DB.meals[u.u+'_'+dateStr];
     const m=meal&&meal[slot];
     if(!m||m.t==='off') return;
-    units += (m.q||1);
+    const q=(m.q||1);
+    units += q;
+    if(u.type==='cook') cookUnits += q;
   });
-  return units;
+  return {units, cookUnits};
 }
 
 function calcMealRate(mmKey){
@@ -317,12 +323,17 @@ function calcMealRate(mmKey){
   const cookBillsTotal = 0;
 
   // ফিস্ট মিল — আলাদা হিসাব, `total`-এ যোগ হয় না (spec অনুযায়ী)
+  // ✅ FIX (2026-08-05): rate = amount ÷ (বাবুর্চি সহ মোট ইউনিট)। বাবুর্চির
+  // ভাগ (rate×cookUnits) সরাসরি বিল করা হয় না — cookShare হিসেবে জমা রেখে
+  // নিচে cookFoodCost-এ যোগ করা হয়।
   const feastEntries = (DB.feastMeals||[]).filter(f=>dateInMessMonth(f.date,mmKey)).map(f=>{
-    const units = _feastSlotUnits(f.date, f.slot);
+    const {units, cookUnits} = _feastSlotUnits(f.date, f.slot);
     const rate  = units>0 ? f.amount/units : 0;
-    return {...f, units, rate};
+    const cookShare = rate * cookUnits; // বাবুর্চির ফিস্ট-মিলের সমমূল্য (তাকে বিল হয় না)
+    return {...f, units, cookUnits, rate, cookShare};
   });
   const feastTotal = feastEntries.reduce((s,f)=>s+f.amount,0);
+  const feastCookTotal = feastEntries.reduce((s,f)=>s+(f.cookShare||0),0); // সব entry মিলিয়ে বাবুর্চির অংশ
 
   const total = bazar + others; // cookBills আর নেই, feast-ও নেই
 
@@ -357,7 +368,10 @@ function calcMealRate(mmKey){
   const FR = R > 0 ? (X - CB) / R : r1; // ফাইনাল মিল রেট (= X/M)
 
   const rateBase = X; // UI-তে "বাকি বাজার" দেখানোর জন্য
-  const cookFoodCost = CB;
+  // ✅ FIX (2026-08-05): cookFoodCost এখন নিয়মিত মিলের CB + ফিস্ট-মিলে
+  // বাবুর্চির অংশ (feastCookTotal) — দুটো মিলিয়েই Inside/Outside ওজন
+  // অনুযায়ী calcMemberOtherShares()-এ পুনর্বণ্টন হবে, আগের নিয়মেই।
+  const cookFoodCost = CB + feastCookTotal;
 
   // Override দিয়ে manual rate সেট থাকলে সেটা ব্যবহার হবে
   const pm = DB.mealRates[mmKey] || FR;
@@ -366,7 +380,7 @@ function calcMealRate(mmKey){
           total, rateBase, officeBil,
           totalMeals, cookMeals, officeMeals, netMeals, M, C, R,
           X, r1, cookFoodCost, pm,
-          feastEntries, feastTotal};
+          feastEntries, feastTotal, feastCookTotal};
   _mealRateCache[mmKey] = result; // cache করো
   return result;
 }
@@ -456,6 +470,9 @@ function calcMemberOtherShares(u, mmKey, othersAll, cookBillsAll, cookFoodCost=0
 // FEAST MEAL — সদস্যের ভাগ
 // calcMealRate()-এর feastEntries (প্রতি entry-তে units+rate সহ) ব্যবহার করে
 // প্রতিটা entry-তে ওই সদস্যের সেই date+slot-এর মিল qty অনুযায়ী ভাগ যোগ করে।
+// বাবুর্চি এখানে বাদ (সরাসরি বিল পায় না) — কিন্তু rate নিজেই বাবুর্চির
+// ইউনিট ধরে বের করা, আর তার ভাগ ইতিমধ্যে cookFoodCost-এ (calcMealRate) যোগ
+// হয়ে গেছে — তাই এখানে বাদ দেওয়া মানেই টাকাটা হারিয়ে যাওয়া না।
 // ⚠️ calcMemberOtherShares()-এর মতো office/zero-net-meal skip এখানে ইচ্ছাকৃতভাবে
 // নেই — ফিস্টে সবাই (Inside/Outside/Office) ঢোকে, শুধু বাবুর্চি বাদ, আর প্রতিটা
 // entry স্বাধীনভাবে সেই date+slot-এ 'off' কিনা তার উপর নির্ভর করে, মাসের মোট

@@ -192,7 +192,16 @@ auth.onAuthStateChanged(fbUser=>{
 // ═══════════════════════════════════════════════
 // Sync check — uses CU.role (already loaded from RTDB on login)
 function isController(u){ u=u||CU; return u&&(u.role==='controller'||(DB.controllers&&DB.controllers.includes(u.u))); }
-function isManager(u){ u=u||CU; return u&&(u.role==='manager'||u.role==='controller'||isController(u)||(DB.managers&&(DB.managers[messMonthKey()]||[]).includes(u.u))); }
+// ✅ FIX (2026-08): আগে DB.managers[মাস] array-এ নাম থাকলেই isManager() true
+// দিত, u.role ভুল/stale থাকলেও। কিন্তু Firebase security rules bazar/
+// transactions/others/feastMeals write-এ শুধু roles/{uid}/role চেক করে —
+// array-membership না। ফলে কারো role field ঠিকভাবে sync না হলে (যেমনটা
+// রফিকুলের ক্ষেত্রে হয়েছিল) client-এ ফর্ম দেখাত, কিন্তু আসল write
+// PERMISSION_DENIED হয়ে সাইলেন্টলি ব্যর্থ হতো — refresh করলে এন্ট্রি
+// উধাও। এখন client শুধু role field-ই চেক করে, ঠিক server-rules-এর মতোই —
+// তাই এখন থেকে ফর্ম দেখা মানেই write-ও পাস হবে (setManager()/removeManager()
+// এখন role field সবসময় সঠিকভাবে sync করে, নিচে দেখুন)।
+function isManager(u){ u=u||CU; return u&&(u.role==='manager'||u.role==='controller'||isController(u)); }
 function isManagerOrCtrl(u){ return isManager(u)||isController(u); }
 
 // Async RTDB role check (use when real-time accuracy needed)

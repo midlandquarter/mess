@@ -273,29 +273,41 @@ function saveMealEntry(k, v, mealMmKey){
   const targetRef = (mealMmKey && mealMmKey !== currentMonthKey && monthsRef)
     ? monthsRef.child(mealMmKey)
     : currentMonthRef;
-  if(!targetRef) return;
-  targetRef.child('meals').child(k).set(v).catch(e => console.error('Meal:', e));
+  if(!targetRef){ toast('❌ মিল সেভ ব্যর্থ — সংযোগ প্রস্তুত হয়নি, আবার চেষ্টা করুন'); return; }
+  targetRef.child('meals').child(k).set(v).catch(e => { console.error('Meal:', e); toast('❌ মিল Firebase-এ সেভ ব্যর্থ: '+(e.message||e.code||e)); });
 }
-function saveBazarItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('bazar').child(String(item.id)).set(item).catch(e=>console.error('Bazar:',e)); }
-function deleteBazarItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('bazar').child(String(id)).remove().catch(e=>console.error('BazarDel:',e)); }
-function saveOtherItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('others').child(String(item.id)).set(item).catch(e=>console.error('Others:',e)); }
-function deleteOtherItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('others').child(String(id)).remove().catch(e=>console.error('OthersDel:',e)); }
+// ✅ FIX: আগে _dbLoaded/currentMonthRef guard ফেইল করলে বা Firebase .set()/
+// .remove() reject করলে — দুটো ক্ষেত্রেই কোনো toast ছিল না, শুধু console.error।
+// UI আগেই optimistic push+render+success-toast দিয়ে দিত (addBazar() ইত্যাদি),
+// তাই আসল সেভ ব্যর্থ হলেও user "✅ যোগ হয়েছে" দেখত — refresh করলেই এন্ট্রি
+// উধাও হয়ে যেত, কোনো error না দেখিয়েই। এখন দুই ক্ষেত্রেই toast দেখানো হবে
+// (saveFeastItem-এ আগে থেকেই এই pattern ছিল, এখন সব item-save-এ সমান করা হলো)।
+function _monthItemGuardOK(label){
+  if(_dbLoaded&&currentMonthRef) return true;
+  console.error(label+': blocked — DB not ready (_dbLoaded='+_dbLoaded+')');
+  toast('❌ '+label+' সেভ ব্যর্থ — সংযোগ প্রস্তুত হয়নি, আবার চেষ্টা করুন');
+  return false;
+}
+function saveBazarItem(item){ if(!_monthItemGuardOK('বাজার')||!item?.id) return; currentMonthRef.child('bazar').child(String(item.id)).set(item).catch(e=>{ console.error('Bazar:',e); toast('❌ বাজার Firebase-এ সেভ ব্যর্থ: '+(e.message||e.code||e)); }); }
+function deleteBazarItem(id){ if(!_monthItemGuardOK('বাজার মুছে ফেলা')) return; currentMonthRef.child('bazar').child(String(id)).remove().catch(e=>{ console.error('BazarDel:',e); toast('❌ বাজার মুছতে ব্যর্থ: '+(e.message||e.code||e)); }); }
+function saveOtherItem(item){ if(!_monthItemGuardOK('অন্যান্য খরচ')||!item?.id) return; currentMonthRef.child('others').child(String(item.id)).set(item).catch(e=>{ console.error('Others:',e); toast('❌ অন্যান্য খরচ সেভ ব্যর্থ: '+(e.message||e.code||e)); }); }
+function deleteOtherItem(id){ if(!_monthItemGuardOK('অন্যান্য খরচ মুছে ফেলা')) return; currentMonthRef.child('others').child(String(id)).remove().catch(e=>{ console.error('OthersDel:',e); toast('❌ অন্যান্য খরচ মুছতে ব্যর্থ: '+(e.message||e.code||e)); }); }
 function saveFeastItem(item){
-  if(!_dbLoaded||!currentMonthRef||!item?.id) return;
+  if(!_monthItemGuardOK('ফিস্ট মিল')||!item?.id) return;
   currentMonthRef.child('feastMeals').child(String(item.id)).set(item).catch(e=>{
     console.error('Feast:',e);
     toast('❌ ফিস্ট মিল Firebase-এ সেভ ব্যর্থ: '+(e.message||e.code||e));
   });
 }
 function deleteFeastItem(id){
-  if(!_dbLoaded||!currentMonthRef) return;
+  if(!_monthItemGuardOK('ফিস্ট মিল মুছে ফেলা')) return;
   currentMonthRef.child('feastMeals').child(String(id)).remove().catch(e=>{
     console.error('FeastDel:',e);
-    toast('❌ ফিস্ট মিল Firebase থেকে মুছতে ব্যর্থ: '+(e.message||e.code||e));
+    toast('❌ ফিস্ট মিল থেকে মুছতে ব্যর্থ: '+(e.message||e.code||e));
   });
 }
-function saveTxItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>console.error('Tx:',e)); }
-function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>console.error('TxDel:',e)); }
+function saveTxItem(item){ if(!_monthItemGuardOK('লেনদেন')||!item?.id) return; currentMonthRef.child('transactions').child(String(item.id)).set(item).catch(e=>{ console.error('Tx:',e); toast('❌ লেনদেন সেভ ব্যর্থ: '+(e.message||e.code||e)); }); }
+function deleteTxItem(id){ if(!_monthItemGuardOK('লেনদেন মুছে ফেলা')) return; currentMonthRef.child('transactions').child(String(id)).remove().catch(e=>{ console.error('TxDel:',e); toast('❌ লেনদেন মুছতে ব্যর্থ: '+(e.message||e.code||e)); }); }
 // ✅ FIX: office-meal.js এই দুইটা function ৬ জায়গায় call করে (saveOfficeMeal,
 // saveOfficeMealNote, saveOfficeMealNoteScreen, editOfficeMealNote,
 // delOfficeMealNote), file_report.md-ও এদের db.js-এর অংশ বলে ধরে নিয়েছে —
@@ -306,8 +318,8 @@ function deleteTxItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonth
 // (confirmation msg না আসা), আর নোটটা Firebase-এ আসলে লেখাই হতো না
 // (তাই refresh করলে হারিয়ে যেত)। saveBazarItem/saveOtherItem/saveTxItem-এর
 // মতোই individual-path pattern।
-function saveOfficeMealNoteItem(item){ if(!_dbLoaded||!currentMonthRef||!item?.id) return; currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>console.error('OfficeMealNote:',e)); }
-function deleteOfficeMealNoteItem(id){ if(!_dbLoaded||!currentMonthRef) return; currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>console.error('OfficeMealNoteDel:',e)); }
+function saveOfficeMealNoteItem(item){ if(!_monthItemGuardOK('অফিস মিল নোট')||!item?.id) return; currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>{ console.error('OfficeMealNote:',e); toast('❌ অফিস মিল নোট সেভ ব্যর্থ: '+(e.message||e.code||e)); }); }
+function deleteOfficeMealNoteItem(id){ if(!_monthItemGuardOK('অফিস মিল নোট মুছে ফেলা')) return; currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>{ console.error('OfficeMealNoteDel:',e); toast('❌ অফিস মিল নোট মুছতে ব্যর্থ: '+(e.message||e.code||e)); }); }
 
 // ── Pending Approval helpers ────────────────────────────────────────────────
 // Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
