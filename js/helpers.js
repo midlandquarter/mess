@@ -19,10 +19,22 @@ function fmtDateBN(dt){
   return `${days[dt.getDay()]}, ${dt.getDate()} ${months[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
-// Toast notification
+// Toast notification — centered glass card, auto-detects type/icon from
+// the leading emoji already used across the app (✅ ❌ ⚠️ ⏳ 🔔 🗑️ ✏️)
+const TOAST_TYPES={'✅':'success','❌':'error','⚠️':'warning','⏳':'loading','🔔':'info','🗑️':'info','✏️':'info'};
+let _toastTimer=null;
 function toast(msg){
   const t=document.getElementById('toast');
-  t.textContent=msg;
+  if(!t) return;
+  let type='neutral',icon='',text=msg;
+  for(const key in TOAST_TYPES){
+    if(msg.indexOf(key)===0){ type=TOAST_TYPES[key]; icon=key; text=msg.slice(key.length).trim(); break; }
+  }
+  t.dataset.type=type;
+  t.innerHTML=(icon?'<span class="toast-icon">'+icon+'</span>':'')+'<span class="toast-msg"></span>';
+  t.querySelector('.toast-msg').textContent=text;
+  t.classList.remove('show'); void t.offsetWidth; // restart pop-in animation on rapid re-trigger
   t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2800);
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>t.classList.remove('show'),type==='loading'?4000:2800);
 }

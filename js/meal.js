@@ -136,8 +136,13 @@ function saveMeal(){
   const bLabel=bT==='off'?'off':(bQ>1?bT+bQ:bT);
   const lLabel=lT==='off'?'off':(lQ>1?lT+lQ:lT);
   const dLabel=dT==='off'?'off':(dQ>1?dT+dQ:dT);
+  // ✅ FIX: raw ISO "YYYY-MM-DD" ভেঙে বাজেভাবে wrap হতো (toast/modal-এ)।
+  // এখন "DD‑MM‑YYYY(বার)" ফরম্যাটে দেখানো হয় (app-এর বাকি জায়গার মতোই) —
+  // আর সাধারণ '-' এর বদলে non-breaking hyphen (U+2011) ব্যবহার করা হয়েছে,
+  // যাতে narrow toast card-এও তারিখটা মাঝখানে ভেঙে দুই লাইনে না যায়।
+  const dispDate = fmtDate(mealDate).replace(/-/g,'\u2011')+'('+getBengaliDayAbbr(mealDate)+')';
   showModal('মিল সেভ করুন',
-    `${mealDate} এর মিল:\n\n☀️ সকাল: ${bLabel} = ${bv.toFixed(2)} meals\n🌞 দুপুর: ${lLabel} = ${lv.toFixed(2)} meals\n🌙 রাত: ${dLabel} = ${dv.toFixed(2)} meals\n\nমোট: ${(bv+lv+dv).toFixed(2)} meals`,
+    `${dispDate} এর মিল:\n\n☀️ সকাল: ${bLabel} = ${bv.toFixed(2)} meals\n🌞 দুপুর: ${lLabel} = ${lv.toFixed(2)} meals\n🌙 রাত: ${dLabel} = ${dv.toFixed(2)} meals\n\nমোট: ${(bv+lv+dv).toFixed(2)} meals`,
     function(){ const _mk=CU.u+'_'+mealDate,_mv={b:{t:bT,q:bQ},l:{t:lT,q:lQ},d:{t:dT,q:dQ}};
     DB.meals[_mk]=_mv;
     // ✅ FIX: meal date যে মেস মাসে পড়ে, সেই bucket-এ save।
@@ -145,8 +150,24 @@ function saveMeal(){
     const _mealMmKey = messMonthKey(new Date(mealDate));
     saveMealEntry(_mk,_mv,_mealMmKey);
     invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
-    toast('Done✅ '+mealDate+' মিল সেভ হয়েছে'); refreshHome(); }
+    showMealSuccessAnim(dispDate); refreshHome(); }
   );
+}
+// বড় animated checkmark দিয়ে মিল সেভ কনফার্ম করে — সাধারণ toast()-এর চেয়ে
+// বেশি gestural, যেহেতু এটা user-এর দিনের সবচেয়ে ঘন ঘন করা action।
+let _mealSuccessTimer=null;
+function showMealSuccessAnim(dispDate){
+  const ov=document.getElementById('meal-success-ov');
+  if(!ov) return;
+  document.getElementById('meal-success-sub').textContent=dispDate+' এর মিল সফলভাবে সেভ হয়েছে';
+  ov.classList.remove('show'); void ov.offsetWidth; // retrigger-safe animation reset
+  ov.classList.add('show');
+  clearTimeout(_mealSuccessTimer);
+  _mealSuccessTimer=setTimeout(hideMealSuccessAnim,1900);
+}
+function hideMealSuccessAnim(){
+  document.getElementById('meal-success-ov')?.classList.remove('show');
+  clearTimeout(_mealSuccessTimer);
 }
 function fmtMealLine(t,q,v){
   if(t==='off') return 'off (বন্ধ)';
