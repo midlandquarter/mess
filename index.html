@@ -110,24 +110,19 @@ try{
       <div class="date-nav">
         <button class="date-nav-btn" onclick="ofmsShiftDate(-1)">‹</button>
         <span class="date-display-wrap" style="flex:1">
-          <input type="date" id="ofms-date" class="form-input" style="width:100%" onchange="ofmsLoadDate();updateDateLabel('ofms-date')">
+          <input type="date" id="ofms-date" class="form-input" style="width:100%" onchange="ofmsLoadDate();updateDateLabel('ofms-date');appendDayToBNLabel('ofms-date')">
           <span class="date-display-label" id="ofms-date-lbl">-- তারিখ --</span>
         </span>
         <button class="date-nav-btn" onclick="ofmsShiftDate(1)">›</button>
       </div>
     </div>
 
-    <!-- Month + Rate -->
-    <div class="card">
-      <div class="sec-title">💰 অফিস মিল রেট</div>
-      <div class="form-group">
-        <label class="form-label">মেস মাস</label>
-        <select id="ofms-month" class="form-input" onchange="loadOfficeMealScreen()"></select>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
-        <span style="font-size:13px">প্রতি মিল রেট: <b style="color:var(--primary)" id="ofms-rate-display">৳0.00</b></span>
-        <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 16px;font-size:13px" onclick="openOfmsRatePopup()">✏️ রেট সেট করুন</button>
-      </div>
+    <!-- Office Meal Rate -->
+    <div class="card" style="padding:12px 14px 14px">
+      <button onclick="togOfmsRateCfg()" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:13px 8px;cursor:pointer;text-align:center;color:var(--text);font-family:inherit">
+        <div style="font-size:14px;font-weight:700;color:var(--primary)">💰 অফিস মিল রেট</div>
+        <div style="font-size:11px;color:var(--text-light);margin-top:3px" id="ofms-rate-btn-sub">বর্তমান রেট: ৳0.00</div>
+      </button>
     </div>
 
     <!-- MEPL Account -->
@@ -252,6 +247,20 @@ try{
         <select id="ofms-note-month-sel" class="form-input" style="width:auto;min-width:160px;padding:6px 10px;font-size:13px" onchange="renderOfficeMealNotesScreen()"><option value="">-- মাস সিলেক্ট করুন --</option></select>
       </div>
       <div id="ofms-notes-history"><p class="muted tc">কোনো নোট নেই</p></div>
+    </div>
+
+    <!-- Hidden popup card: office meal rate settings -->
+    <div id="card-ofms-rate" style="display:none">
+      <div class="sec-title">💰 অফিস মিল রেট সেট করুন</div>
+      <div class="form-group">
+        <label class="form-label">মেস মাস</label>
+        <select id="ofms-month" class="form-input" onchange="loadOfficeMealScreen()"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">প্রতি মিল রেট ৳</label>
+        <input type="number" id="ofms-rate" class="form-input" placeholder="যেমন: ৫৫.৫" min="0" step="0.01">
+      </div>
+      <button class="btn btn-primary" onclick="saveOfficeMealRateScreen()" style="margin-bottom:0">✅ রেট সেভ করুন</button>
     </div>
 
   </div>
