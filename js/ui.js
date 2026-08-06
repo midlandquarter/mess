@@ -144,6 +144,7 @@ function tog(id){
 function closeAllAdminCards(){
   closeAdmPopup();
   closeRulesCfgPopup();
+  if(typeof closeOfmsRateCfgPopup==='function') closeOfmsRateCfgPopup();
 }
 function closeRulesCfgPopup(){
   const o=document.getElementById('rules-cfg-popup-overlay');
