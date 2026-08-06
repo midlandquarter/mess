@@ -188,9 +188,15 @@ html.dark-mode{background:#0f0f1a;color:#f1f5f9;}
 /* Toast notifications */
 .dark-mode .toast{
   background:linear-gradient(145deg,rgba(45,45,74,0.95),rgba(26,26,46,0.98));
-  border:1px solid #a78bfa;
+  border:1px solid rgba(167,139,250,0.35);
   color:#f1f5f9;
-  box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 20px rgba(167,139,250,0.2);
+  box-shadow:0 20px 60px rgba(0,0,0,0.55),0 0 24px rgba(167,139,250,0.15);
+}
+.dark-mode .toast-icon{background:rgba(15,15,26,0.6);}
+.dark-mode .success-card{
+  background:linear-gradient(145deg,rgba(45,45,74,0.95),rgba(26,26,46,0.98));
+  border:1px solid rgba(167,139,250,0.35);
+  box-shadow:0 24px 70px rgba(0,0,0,0.55),0 0 30px rgba(167,139,250,0.15);
 }
 /* Today's header */
 .dark-mode .today-hd{color:#c4b5fd;}
@@ -342,7 +348,6 @@ body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--tex
   .stats-row{grid-template-columns:repeat(4,1fr);}
   .modal{max-width:600px;border-radius:20px !important;margin:auto;}
   .modal-bg{align-items:center !important;}
-  .toast{bottom:30px;}
   .edit-row{grid-template-columns:1fr 1fr 1fr;}
   .header-title{font-size:16px;}
   .card{padding:24px 28px;}
@@ -395,6 +400,11 @@ body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--tex
 .form-input{width:100%;padding:12px 16px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:15px;font-family:inherit;color:var(--text);background:var(--bg);transition:border-color .2s;outline:none;}
 .form-input:focus{border-color:var(--primary);background:var(--card);}
 .form-input.err{border-color:var(--danger);background:var(--danger-light);}
+/* ── Native date input: hide browser's own mm/dd/yyyy text and show a ──
+   ── single Bangladesh-style DD-MM-YYYY label overlaid on top instead ── */
+.date-display-wrap{position:relative;display:flex;align-items:center;}
+.date-display-wrap input[type="date"]{position:relative;color:transparent;width:100%;}
+.date-display-label{position:absolute;left:16px;right:40px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text);pointer-events:none;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .err-txt{color:var(--danger);font-size:12px;margin-top:4px;display:none;}
 .err-txt.show{display:block;}
 /* BUTTONS */
@@ -586,9 +596,30 @@ body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--tex
 .muted{color:var(--text-light);font-size:13px;}
 /* MESS MONTH INFO */
 .mess-month-bar{background:linear-gradient(90deg,var(--primary-dark),var(--primary));color:#fff;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:8px;}
-/* TOAST */
-.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--primary-dark);color:#fff;padding:16px 28px;border-radius:14px;font-size:16px;font-weight:600;line-height:1.4;z-index:10002;opacity:0;transition:all .3s;pointer-events:none;white-space:pre-line;max-width:88vw;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,0.3);}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+/* TOAST — centered, modern glass card with type-colored icon badge */
+.toast{
+  position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(.82) translateY(6px);
+  display:flex;align-items:center;gap:13px;
+  background:var(--card);color:var(--text);
+  padding:15px 20px;border-radius:18px;
+  font-size:14.5px;font-weight:600;line-height:1.5;
+  z-index:10002;opacity:0;pointer-events:none;
+  white-space:pre-line;max-width:min(86vw,380px);text-align:left;
+  border:1px solid var(--border);
+  box-shadow:0 20px 60px rgba(0,0,0,.28),0 4px 18px rgba(0,0,0,.12);
+  backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);
+  transition:opacity .35s cubic-bezier(.34,1.56,.64,1),transform .35s cubic-bezier(.34,1.56,.64,1),background-color .25s ease,border-color .25s ease;
+}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1) translateY(0);}
+.toast-icon{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1;background:var(--bg);}
+.toast-msg{flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;}
+.toast[data-type="success"] .toast-icon{background:var(--success-light);color:var(--success);}
+.toast[data-type="error"] .toast-icon{background:var(--danger-light);color:var(--danger);}
+.toast[data-type="warning"] .toast-icon{background:rgba(240,165,0,.15);color:var(--accent);}
+.toast[data-type="info"] .toast-icon{background:var(--info-light);color:var(--info);}
+.toast[data-type="loading"] .toast-icon{background:var(--info-light);color:var(--info);animation:toastSpin .9s linear infinite;}
+@keyframes toastSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 /* MODAL */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:none;align-items:flex-end;justify-content:center;}
 .modal-bg.show{display:flex;}
@@ -597,6 +628,30 @@ body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--tex
 .modal-body{font-size:14px;color:var(--text-light);margin-bottom:20px;white-space:pre-line;line-height:1.6;}
 .modal-btns{display:flex;gap:10px;}
 .modal-btns .btn{margin:0;flex:1;}
+/* SUCCESS OVERLAY — big animated checkmark (meal save confirmation) */
+.success-ov{position:fixed;inset:0;z-index:10005;display:none;align-items:center;justify-content:center;pointer-events:none;}
+.success-ov.show{display:flex;pointer-events:auto;}
+.success-card{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--card);border:1px solid var(--border);border-radius:24px;
+  padding:34px 40px 28px;max-width:86vw;text-align:center;cursor:pointer;
+  box-shadow:0 24px 70px rgba(0,0,0,.3);
+  backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);
+  opacity:0;transform:scale(.72) translateY(8px);
+  transition:opacity .4s cubic-bezier(.34,1.56,.64,1),transform .4s cubic-bezier(.34,1.56,.64,1);
+}
+.success-ov.show .success-card{opacity:1;transform:scale(1) translateY(0);}
+.success-check-wrap{position:relative;width:88px;height:88px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;}
+.success-glow{position:absolute;width:88px;height:88px;border-radius:50%;background:radial-gradient(circle,var(--success) 0%,transparent 70%);opacity:0;transform:scale(.3);}
+.success-ov.show .success-glow{animation:successGlow .9s ease-out .1s;}
+@keyframes successGlow{0%{transform:scale(.3);opacity:.55;}70%{transform:scale(1.7);opacity:0;}100%{transform:scale(1.7);opacity:0;}}
+.success-check{width:88px;height:88px;position:relative;}
+.success-check-circle{fill:none;stroke:var(--success);stroke-width:4;stroke-linecap:round;stroke-dasharray:227;stroke-dashoffset:227;transition:stroke-dashoffset .55s cubic-bezier(.65,0,.35,1) .05s;}
+.success-ov.show .success-check-circle{stroke-dashoffset:0;}
+.success-check-mark{fill:none;stroke:var(--success);stroke-width:5.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:52;stroke-dashoffset:52;transition:stroke-dashoffset .35s ease .5s;}
+.success-ov.show .success-check-mark{stroke-dashoffset:0;}
+.success-title{font-size:17px;font-weight:800;color:var(--text);margin-top:2px;}
+.success-sub{font-size:13.5px;font-weight:600;color:var(--text-light);line-height:1.55;white-space:pre-line;}
 /* MESS MANAGER SCREEN */
 .mgr-card{background:var(--card);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;box-shadow:var(--shadow);border:1px solid var(--border);}
 .mgr-av{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-light));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;flex-shrink:0;}

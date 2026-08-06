@@ -109,7 +109,10 @@ try{
       <div class="sec-title">📅 তারিখ নির্বাচন করুন</div>
       <div class="date-nav">
         <button class="date-nav-btn" onclick="ofmsShiftDate(-1)">‹</button>
-        <input type="date" id="ofms-date" class="form-input" style="flex:1" onchange="ofmsLoadDate()">
+        <span class="date-display-wrap" style="flex:1">
+          <input type="date" id="ofms-date" class="form-input" style="width:100%" onchange="ofmsLoadDate();updateDateLabel('ofms-date')">
+          <span class="date-display-label" id="ofms-date-lbl">-- তারিখ --</span>
+        </span>
         <button class="date-nav-btn" onclick="ofmsShiftDate(1)">›</button>
       </div>
     </div>
@@ -121,21 +124,10 @@ try{
         <label class="form-label">মেস মাস</label>
         <select id="ofms-month" class="form-input" onchange="loadOfficeMealScreen()"></select>
       </div>
-      <div class="form-group">
-        <label class="form-label">প্রতি মিল রেট ৳</label>
-        <input type="number" id="ofms-rate" class="form-input" placeholder="যেমন: ৫৫.৫" min="0" step="0.01">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <span style="font-size:13px">প্রতি মিল রেট: <b style="color:var(--primary)" id="ofms-rate-display">৳0.00</b></span>
+        <button class="btn btn-outline" style="width:auto;margin:0;padding:8px 16px;font-size:13px" onclick="openOfmsRatePopup()">✏️ রেট সেট করুন</button>
       </div>
-      <button class="btn btn-primary" onclick="saveOfficeMealRateScreen()">✅ রেট সেভ করুন</button>
-    </div>
-
-    <!-- Legend -->
-    <div class="card" style="padding:14px 18px;">
-      <div class="legend">
-        <span class="tag-P">P = প্ল্যান্ট</span>
-        <span class="tag-Q">Q = কোয়ার্টার</span>
-        <span class="tag-off">off = বন্ধ</span>
-      </div>
-      <p style="font-size:11px;color:var(--text-light);margin-top:6px">সংখ্যা × মিল মান = মোট মিল। যেমন সকালে ২ দিলে = ২×০.৭৫ = ১.৫ মিল</p>
     </div>
 
     <!-- MEPL Account -->
@@ -1272,6 +1264,21 @@ try{
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ═══════════ MEAL SAVE SUCCESS OVERLAY ═══════════ -->
+<div class="success-ov" id="meal-success-ov" onclick="hideMealSuccessAnim()">
+  <div class="success-card">
+    <div class="success-check-wrap">
+      <span class="success-glow"></span>
+      <svg class="success-check" viewBox="0 0 80 80" width="88" height="88">
+        <circle class="success-check-circle" cx="40" cy="40" r="36" fill="none"/>
+        <path class="success-check-mark" d="M23 41 L35 53 L58 27" fill="none"/>
+      </svg>
+    </div>
+    <div class="success-title">মিল সেভ হয়েছে!</div>
+    <div class="success-sub" id="meal-success-sub"></div>
+  </div>
+</div>
 
 <script>
 // config.js + utils.js + db.js → moved to external files
