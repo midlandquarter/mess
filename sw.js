@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v14'; // v13: some feature and styles upgrade 
+const CACHE_VERSION = 'mq-v15'; // v13: some feature and styles upgrade 
 
 const SHELL_ASSETS = [
   './',
