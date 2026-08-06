@@ -148,6 +148,7 @@ function initOfficeMealScreen(){
   if(!ofmsDate) ofmsDate = nextDay(tod());
   const dateEl = document.getElementById('ofms-date');
   if(dateEl) dateEl.value = ofmsDate;
+  updateDateLabel('ofms-date');
   document.getElementById('ofms-date-sub').textContent = fmtDate(ofmsDate);
   loadOfficeMealScreen();
   renderOfficeMealNotesScreen(); // নোট ইতিহাস দেখাও
@@ -157,6 +158,7 @@ function ofmsShiftDate(delta){
   const d = new Date(ofmsDate); d.setDate(d.getDate()+delta);
   ofmsDate = toISODate(d);
   document.getElementById('ofms-date').value = ofmsDate;
+  updateDateLabel('ofms-date');
   document.getElementById('ofms-date-sub').textContent = fmtDate(ofmsDate);
   ['mepl','mpcl'].forEach(key => {
     const entry = document.getElementById('ofms-'+key+'-entry');
@@ -248,11 +250,12 @@ function toggleOfficeMealEntry(key){
 function loadOfficeMealScreen(){
   const mmKey = document.getElementById('ofms-month')?.value || messMonthKey();
   const rate = getOfficeMealRate(mmKey);
-  const rateEl = document.getElementById('ofms-rate');
-  if(rateEl) rateEl.value = rate||'';
+  const rateEl = document.getElementById('ofms-rate-display');
+  if(rateEl) rateEl.textContent = '৳'+(rate||0).toFixed(2);
   if(!ofmsDate) ofmsDate = nextDay(tod());
   const dateEl = document.getElementById('ofms-date');
   if(dateEl) dateEl.value = ofmsDate;
+  updateDateLabel('ofms-date');
   const subEl = document.getElementById('ofms-date-sub');
   if(subEl) subEl.textContent = fmtDate(ofmsDate);
   ['mepl','mpcl'].forEach(key=>{
@@ -267,16 +270,29 @@ function loadOfficeMealScreen(){
   renderOfficeMealNotesScreen();
 }
 
-function saveOfficeMealRateScreen(){
-  if(!isOnline()){ noNetPopup(); return; }
+function openOfmsRatePopup(){
   const mmKey = document.getElementById('ofms-month')?.value;
   if(!mmKey){ toast('❌ মাস নির্বাচন করুন!'); return; }
-  const rate = parseFloat(document.getElementById('ofms-rate').value);
-  if(isNaN(rate)||rate<0){ toast('❌ সঠিক রেট দিন!'); return; }
-  if(!DB.officeMealRates) DB.officeMealRates={};
-  DB.officeMealRates[mmKey] = rate;
-  saveMonth(); loadOfficeMealScreen();
-  toast('✅ অফিস মিল রেট সেভ: ৳'+rate.toFixed(2));
+  const curRate = getOfficeMealRate(mmKey);
+  const html = `<div style="padding-top:4px">
+    <label style="font-size:12px;font-weight:600;color:var(--text-light)">প্রতি মিল রেট ৳ — ${esc(mmKey)}</label>
+    <input type="number" id="ofms-rate-popup" class="form-input" placeholder="যেমন: ৫৫.৫" min="0" step="0.01" style="margin-top:4px">
+  </div>`;
+  showModal('💰 অফিস মিল রেট সেট করুন', html, function(){
+    if(!isOnline()){ noNetPopup(); return; }
+    const rate = parseFloat(document.getElementById('ofms-rate-popup').value);
+    if(isNaN(rate)||rate<0){ toast('❌ সঠিক রেট দিন!'); return; }
+    if(!DB.officeMealRates) DB.officeMealRates={};
+    DB.officeMealRates[mmKey] = rate;
+    saveMonth();
+    closeModal();
+    loadOfficeMealScreen();
+    toast('✅ অফিস মিল রেট সেভ: ৳'+rate.toFixed(2));
+  }, true);
+  setTimeout(()=>{
+    const inp = document.getElementById('ofms-rate-popup');
+    if(inp) inp.value = curRate||'';
+  }, 50);
 }
 
 function saveOfficeMeal(key){
