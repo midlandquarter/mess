@@ -667,7 +667,10 @@ body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--tex
 .stat-card:active{transform:scale(.97);}
 /* NOTICE POPUP */
 .notice-modal-center{align-items:center !important;}
-.notice-modal-center .modal{border-radius:20px;margin:20px;}
+.notice-modal-center .modal{border-radius:20px;margin:20px;padding:16px 20px;}
+.notice-attention-title{text-align:center;font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--primary);padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid var(--border);}
+#notice-popup-body{color:var(--text);font-size:16px;font-weight:500;line-height:1.8;}
+#notice-popup-modal .btn-primary{box-shadow:none;}
 .tab-strip{display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;}
 .tab-btn{padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:var(--bg);color:var(--text-light);font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s;}
 .tab-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}

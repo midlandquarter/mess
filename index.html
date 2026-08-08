@@ -1178,12 +1178,11 @@ try{
 
 <div class="modal-bg notice-modal-center" id="notice-popup-modal">
   <div class="modal" style="border-radius:20px;max-height:80vh">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div class="modal-title" style="margin:0">📢 নোটিশ</div>
-      <button onclick="closeNoticePopup()" style="background:var(--danger);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">×</button>
+    <div class="notice-attention-title">Attention Please</div>
+    <div id="notice-popup-body" class="modal-body" style="margin-bottom:12px;max-height:50vh;overflow-y:auto"></div>
+    <div style="text-align:center">
+      <button class="btn btn-primary btn-sm" onclick="closeNoticePopup()">বুঝেছি, বন্ধ করুন</button>
     </div>
-    <div id="notice-popup-body" class="modal-body" style="margin-bottom:16px;max-height:50vh;overflow-y:auto"></div>
-    <button class="btn btn-primary" onclick="closeNoticePopup()" style="margin-bottom:0">✅ বুঝেছি, বন্ধ করুন</button>
   </div>
 </div>
 
