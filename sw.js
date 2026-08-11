@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v16'; // v13: office meals system and styles upgrade 
+const CACHE_VERSION = 'mq-v17'; // v17: few major bug fixed 
 
 const SHELL_ASSETS = [
   './',
