@@ -168,6 +168,28 @@ function saveGlobal(){
   }, 400);
 }
 
+// ── roles/{uid} + users/{uid}/role — একসাথে, সত্যিকারের atomic ভাবে বদলানো ──
+// ⚠️ CRITICAL FIX (2026-08-11, Rashedul/রফিকুল/Helal ইনসিডেন্টের পর): এই দুটো
+// path আগে ৩ জায়গায় (admin.js syncRole(), auth.js-এর দুই login flow) সবসময়
+// আলাদা, independent .set() call হিসেবে লেখা হতো। roles/{uid}-ই আসল permission
+// source — Firebase rules বাজার/লেনদেন/অন্যান্য/managers-list write আর *লগইনে*
+// role নির্ধারণ, দুটোই এটাই প্রথমে চেক করে (auth.js দেখুন)। এই দুটো write-এর
+// একটা ব্যর্থ হয়ে আরেকটা সফল হলে — exactly যেমন Rashedul-এর ক্ষেত্রে হয়েছে —
+// users[].role সাধারণ 'member' দেখায়, ম্যানেজার লিস্টেও নেই, অথচ roles/{uid}
+// এখনো 'manager'-ই থেকে যায়, ফলে আসল write-access (আর পরের বার লগইন করলে
+// আবার manager হিসেবে দেখানো) রয়েই যায় — কোনো error ছাড়াই, বহুদিন ধরা পড়ে না।
+// সমাধান: single multi-path .update() — Firebase multi-location update
+// প্রকৃতপক্ষে atomic (দুটো path-ই একসাথে সফল হবে, নাহলে দুটোই ব্যর্থ হবে,
+// rules যেকোনো একটা path-এ reject করলে গোটা update-ই reject হয়, আংশিক লেখা
+// হয় না) — তাই আর কখনো "একটা হলো একটা হলো না" অবস্থা তৈরি হতে পারবে না।
+function setRoleAtomic(uid, role){
+  if(!uid) return Promise.reject('setRoleAtomic: uid missing');
+  const updates={};
+  updates['roles/'+uid+'/role']=role;
+  updates['users/'+uid+'/role']=role;
+  return firebase.database().ref().update(updates);
+}
+
 // ── controllers আলাদা save — controller-only Firebase path ─────────────────
 // Firebase Rule: global/controllers → শুধু controller লিখতে পারবে।
 // GLOBAL_FIELDS-এ নেই কারণ saveGlobal() manager-ও call করে →
@@ -178,6 +200,37 @@ function saveControllers(){
   globalRef.child('controllers').set(DB.controllers||[]).catch(e=>{
     console.error('Controllers save:',e);
     toast('⚠️ Controllers সেভে সমস্যা!');
+  });
+}
+
+// ── controllers-এ একজনকে add/remove — transaction দিয়ে, blob-overwrite নয় ──
+// ⚠️ RACE CONDITION FIX (2026-08): saveControllers() উপরে DB.controllers
+// (local কপি) পুরোটাই .set() করে দেয়। দুইজন controller/manager প্রায়
+// একই মুহূর্তে addController()/removeController() চালালে — যার write
+// Firebase-এ শেষে পৌঁছায় সে আগেরজনের পরিবর্তন সম্পূর্ণ মুছে দেয় (list
+// ছোট বলে বাস্তবে কম ঘটে, কিন্তু ঘটলে চুপচাপ ঘটে, কোনো error ছাড়াই)।
+// transaction() Firebase-এর বর্তমান (fresh) মান পড়ে, শুধু এই uname-টা
+// add/remove করে, আর কনফ্লিক্ট হলে নিজে থেকেই আবার চেষ্টা করে — অন্য
+// কারো concurrent পরিবর্তন হারায় না।
+function updateControllers(uname, add){
+  if(!_dbLoaded||!globalRef||!uname) return Promise.reject('not ready');
+  // Optimistic local update — তাৎক্ষণিক UI feedback, নেটওয়ার্কের অপেক্ষা নেই
+  if(add){ if(!DB.controllers.includes(uname)) DB.controllers.push(uname); }
+  else { DB.controllers=DB.controllers.filter(c=>c!==uname); }
+  return globalRef.child('controllers').transaction(current=>{
+    if(!Array.isArray(current)) current=[];
+    if(add){ if(!current.includes(uname)) current.push(uname); }
+    else { current=current.filter(c=>c!==uname); }
+    return current;
+  }).then(result=>{
+    if(result.committed && Array.isArray(result.snapshot.val())){
+      DB.controllers=result.snapshot.val();
+    }
+    return result;
+  }).catch(e=>{
+    console.error('Controllers save:',e);
+    toast('⚠️ Controllers সেভে সমস্যা!');
+    throw e;
   });
 }
 
@@ -208,6 +261,61 @@ function saveUsers(){
   }
   _minUserCount=Math.max(_minUserCount,_uniq);
   globalRef.child('users').set(DB.users).catch(e=>{ console.error('Users save error:',e); toast('⚠️ সদস্য সেভে সমস্যা!'); });
+}
+
+// ── একজন সদস্যের রেকর্ড নিরাপদে বদলানো — transaction দিয়ে, blob-overwrite নয় ──
+// ⚠️ CRITICAL RACE CONDITION FIX (2026-08): saveUsers() উপরে সবসময় গোটা
+// local DB.users array-টাই globalRef-এ .set() করে দেয় — ২০০ জন সদস্যের
+// পুরো তালিকা প্রতিবার পুরোপুরি ওভাররাইট। saveProfile() (প্রতিটা সদস্য
+// নিজের প্রোফাইল বদলাতে পারে) আর admin.js-এর member-edit/block/role/delete
+// — সব কটাই এই পথ দিয়ে যায়। দুইজন ভিন্ন মানুষ (যেমন দুইজন সদস্য একই সময়ে
+// প্রোফাইল সেভ করলে, বা একজন সদস্য প্রোফাইল সেভ করার সময় একজন Manager
+// অন্য কাউকে ব্লক করলে) প্রায় একই মুহূর্তে সেভ করলে — যার write শেষে
+// Firebase-এ পৌঁছায়, সে আগের write-এ থাকা অন্য মানুষের পরিবর্তনটা
+// সম্পূর্ণ মুছে দেয়। কোনো error দেখায় না, UI-তে "✅ সংরক্ষিত হয়েছে"-ই
+// দেখা যায় — তারপর নীরবে হারিয়ে যায়।
+// সমাধান: globalRef.child('users').transaction() — Firebase-এর বর্তমান
+// (fresh, সার্ভার-সাইড) array পড়ে, শুধু এই uname-এর রেকর্ডটাই বদলায়,
+// আর কনফ্লিক্ট ধরা পড়লে (কেউ মাঝখানে অন্য কিছু বদলেছে) নিজে থেকেই আবার
+// চেষ্টা করে fresh ডেটা দিয়ে — অন্য কারো ভিন্ন রেকর্ডে করা concurrent
+// পরিবর্তন আর হারায় না। approvePendingUser()-এ ঠিক এই একই কৌশল আগে
+// থেকেই ব্যবহার হচ্ছে (rapid approval race এড়াতে) — এখানে সেই প্রমাণিত
+// প্যাটার্নটাই বাকি সব user-record write-এ প্রয়োগ করা হলো।
+//
+// mutatorFn(record) — record-টা mutate করে return করুন, অথবা রেকর্ড মুছে
+// ফেলতে null/undefined return করুন (deleteMember()-এ ব্যবহৃত)।
+// uname সবসময় *পুরনো* u হতে হবে (khoja/lookup key) — mutatorFn ভেতরে
+// চাইলে rec.u বদলে নতুন id-ও বসাতে পারে (saveProfile()-এর ID change কেসে)।
+function updateUserRecord(uname, mutatorFn){
+  if(!_dbLoaded || !uname) return Promise.reject('not ready');
+  // Optimistic local update — তাৎক্ষণিক UI feedback, নেটওয়ার্কের অপেক্ষা নেই।
+  // DB.users বাস্তবিক Firebase real-time listener দিয়ে সবসময় প্রায় fresh
+  // থাকে, তাই স্বাভাবিক (non-racing) ক্ষেত্রে এটাই চূড়ান্ত ফলাফলের সমান হবে।
+  const localIdx = DB.users.findIndex(x=>x && x.u===uname);
+  if(localIdx!==-1){
+    const localRes = mutatorFn({...DB.users[localIdx]});
+    if(localRes===null || localRes===undefined) DB.users.splice(localIdx,1);
+    else DB.users[localIdx]=localRes;
+  }
+  return globalRef.child('users').transaction(current=>{
+    if(!Array.isArray(current)) current=[];
+    const idx=current.findIndex(x=>x && x.u===uname);
+    if(idx===-1) return current; // সার্ভারে এই user নেই (হয়তো এখনো লোড হয়নি) — কিছু করার নেই
+    const updated=mutatorFn({...current[idx]});
+    if(updated===null || updated===undefined) current.splice(idx,1);
+    else current[idx]=updated;
+    return current;
+  }).then(result=>{
+    if(result.committed && Array.isArray(result.snapshot.val())){
+      DB.users=result.snapshot.val().filter(u=>u&&u.u);
+      if(_minUserCount<DB.users.length) _minUserCount=DB.users.length;
+    }
+    return result;
+  }).catch(e=>{
+    console.error('updateUserRecord error:',e);
+    toast('⚠️ সদস্য সেভে সমস্যা!');
+    throw e;
+  });
 }
 
 // ── deleteMemberFromDB: admin.js deleteMember()-এ call করো ─────────────────
@@ -320,6 +428,23 @@ function deleteTxItem(id){ if(!_monthItemGuardOK('লেনদেন মুছ�
 // মতোই individual-path pattern।
 function saveOfficeMealNoteItem(item){ if(!_monthItemGuardOK('অফিস মিল নোট')||!item?.id) return; currentMonthRef.child('officeMealNotes').child(String(item.id)).set(item).catch(e=>{ console.error('OfficeMealNote:',e); toast('❌ অফিস মিল নোট সেভ ব্যর্থ: '+(e.message||e.code||e)); }); }
 function deleteOfficeMealNoteItem(id){ if(!_monthItemGuardOK('অফিস মিল নোট মুছে ফেলা')) return; currentMonthRef.child('officeMealNotes').child(String(id)).remove().catch(e=>{ console.error('OfficeMealNoteDel:',e); toast('❌ অফিস মিল নোট মুছতে ব্যর্থ: '+(e.message||e.code||e)); }); }
+// ── officeMealRates: শুধু এই mmKey-টা লেখো, পুরো month blob নয় ──
+// ⚠️ RACE CONDITION FIX (2026-08): office-meal.js-এর rate-save দুইটা function
+// (saveOfficeMealRate/saveOfficeMealRateScreen) আগে saveMonth() call করত, যেটা
+// SAFE_MONTH_FIELDS = ['meals','managers','mealRates','officeMealRates'] — এই
+// চারটাই local DB থেকে blob হিসেবে overwrite করে, শুধু rate বদলাতে চাইলেও।
+// rate সেভ হওয়ার ঠিক ওই মুহূর্তে অন্য কোনো সদস্য (granular saveMealEntry()
+// দিয়ে) নিজের মিল টগল করলে, rate-save-এর blob write পরে পৌঁছালে সেই
+// মিল-টগলটা নীরবে হারিয়ে যেতে পারত। এখন শুধু officeMealRates/{mmKey}
+// path-টাই লেখা হয় — saveMealEntry()-এর মতোই granular, meals/managers/
+// mealRates অচ্ছুত থাকে।
+function saveOfficeMealRateEntry(mmKey, rate){
+  if(!_monthItemGuardOK('অফিস মিল রেট')) return;
+  currentMonthRef.child('officeMealRates').child(mmKey).set(rate).catch(e=>{
+    console.error('OfficeMealRate:',e);
+    toast('❌ অফিস মিল রেট সেভ ব্যর্থ: '+(e.message||e.code||e));
+  });
+}
 
 // ── Pending Approval helpers ────────────────────────────────────────────────
 // Approve: users/{uid} + roles/{uid} লেখো, DB.users-এ যোগ করো, pending মুছো
@@ -715,10 +840,29 @@ function loadDB(){
             }catch(e){}
             return; // এই listener call-এ আর কিছু করার নেই
           }
-          // ✅ FIX: role পরিবর্তন হলে (manager/controller assign বা remove) active
-          // session-এ সাথে সাথে reflect করা। CU শুধু login-এ set হতো, তাই role
-          // বদলালেও re-login না করা পর্যন্ত পুরনো role/মেনু আটকে থাকত।
-          if(_myEntry.role && _myEntry.role!==CU.role){
+          // ⚠️ FORCE-FIX (2026-08-11, Rashedul ইনসিডেন্টের পর): role কমে গেলে
+          // (manager/controller → এর নিচে কিছু) এখন block-kick-এর মতোই সাথে
+          // সাথে জোরপূর্বক logout। আগে শুধু CU.role লোকালি আপডেট + বর্তমান
+          // স্ক্রিন refresh হতো, hard kick ছিল না — তখন যেই স্ক্রিনে ছিল
+          // তার বাইরে (যেমন Home-এর admin-বাটন) UI stale থেকে যেতে পারত
+          // যতক্ষণ না নিজে Home-এ ফিরত। পুরো logout করলে সেই ঝুঁকিই থাকে
+          // না — নতুন করে লগইন করলে সবকিছুই ফ্রেশ হয়ে যায়। promotion/lateral
+          // (role বাড়া বা একই থাকা) হলে আগের মতোই soft-update, বিরক্তিকর
+          // logout করার দরকার নেই।
+          const _roleRank={member:0,manager:1,controller:2};
+          const _freshRole=_myEntry.role||'member';
+          const _curRank=_roleRank[CU.role]??0, _freshRank=_roleRank[_freshRole]??0;
+          if(_freshRank<_curRank){
+            console.warn('[kick] CU role downgraded ('+CU.role+' → '+_freshRole+') — forcing logout. uid=',CU.uid);
+            auth.signOut().catch(()=>{});
+            CU=null; localStorage.removeItem('mq_authed');
+            try{ showSc('login'); }catch(e){}
+            try{
+              const _kal=document.getElementById('login-alert');
+              if(_kal){ _kal.textContent='ℹ️ আপনার ভূমিকা পরিবর্তন হয়েছে। আবার লগইন করুন।'; _kal.className='alert alert-danger show'; }
+            }catch(e){}
+            return; // এই listener call-এ আর কিছু করার নেই
+          } else if(_myEntry.role && _myEntry.role!==CU.role){
             console.info('[sync] CU role updated:',CU.role,'→',_myEntry.role);
             CU.role=_myEntry.role;
             try{ _refreshActiveScreen(); }catch(e){}

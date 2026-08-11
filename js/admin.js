@@ -354,18 +354,29 @@ function resetHandoverLock(){
 function _reconcileManagerRoles(){
   const curMgrs = DB.managers[messMonthKey()]||[];
   let changed=false;
+  const toDemote=[];
   DB.users.forEach(u=>{
     if(u.role==='manager' && !curMgrs.includes(u.u)){
-      u.role='member'; syncRole(u.u,'member'); changed=true;
+      toDemote.push(u.u); changed=true;
     }
     // Controller থেকে বাদ দেওয়ার পরও role field মাঝেমধ্যে 'controller'
     // আটকে থেকে যেতে পারে (DB.controllers থেকে বাদ গেলেও)। মিলিয়ে দেখে
     // ঠিক করে দিচ্ছি — নাহলে ভুল Controller ব্যাজ দেখায়।
     else if(u.role==='controller' && !(DB.controllers&&DB.controllers.includes(u.u))){
-      u.role='member'; syncRole(u.u,'member'); changed=true;
+      toDemote.push(u.u); changed=true;
     }
   });
-  if(changed) saveUsers();
+  // ⚠️ RACE FIX: আগে এখানেই সরাসরি u.role='member' বসিয়ে সবশেষে একবার
+  // saveUsers() (পুরো users[] blob) ডাকা হতো — এই reconcile pass একসাথে
+  // একাধিক সদস্যের role বদলাতে পারে বলে ঝুঁকিটা আরও বেশি ছিল। এখন প্রতিটা
+  // demote-worthy uname আলাদা transaction দিয়ে বদলায় — অন্য কারো
+  // concurrent প্রোফাইল/role পরিবর্তন হারায় না।
+  if(changed){
+    toDemote.forEach(uname=>{
+      syncRole(uname,'member');
+      updateUserRecord(uname, rec=>{ rec.role='member'; return rec; });
+    });
+  }
 }
 // ✅ FIX (হালকা সংস্করণ): আগের ভার্সন পুরো months tree পড়ত (মিল/বাজার/
 // লেনদেন সহ সব ইতিহাস) — ডাউনলোড খরচ অনাবশ্যক বাড়ত। এখন শুধু প্রতি মাসের
@@ -418,22 +429,20 @@ function renderManagerInfo(){
   }
 }
 // ✅ SHARED HELPER — uid থাকলে সরাসরি, না থাকলে Firebase-এ খুঁজে role update করো
-// ✅ FIX (2026-08): roles/{uid} আর users/{uid}/role — দুইটা আলাদা, independent
-// .set() call ছিল, দুটোই শুধু console.warn করত ব্যর্থ হলে। roles/{uid}-ই আসল
-// permission source (Firebase rules বাজার/লেনদেন/managers write এটাই চেক
-// করে) — এটা fail করলেও UI-তে কোনো ইঙ্গিত ছিল না, ফলে সমস্যা বহুদিন চাপা
-// থেকে যেত (যেমন রফিকুলের ক্ষেত্রে)। এখন দুটো write-ই Promise.all দিয়ে
-// track হয় এবং যেকোনোটা fail করলে সাথে সাথেই toast দেখানো হয়, যিনি
-// assign করছেন তিনি তখনই বুঝতে পারবেন আবার চেষ্টা করতে হবে।
+// ⚠️ CRITICAL FIX (2026-08-11): roles/{uid} আর users/{uid}/role আগে Promise.all
+// দিয়ে ট্র্যাক হতো ঠিকই, কিন্তু সেটা তবু দুইটা *আলাদা* .set() অপারেশন ছিল —
+// একটা সফল হয়ে আরেকটা ব্যর্থ হওয়া তখনও সম্ভব ছিল (Promise.all শুধু দুটোর
+// ফলাফল একসাথে জানায়, ইতিমধ্যে সফল হওয়া write-টা undo করে না)। ঠিক এভাবেই
+// Rashedul/রফিকুল/Helal-এর roles/{uid} 'manager' রয়ে গেছে যদিও users[].role
+// অনেক আগেই 'member' দেখাচ্ছিল। এখন db.js-এর setRoleAtomic() — single
+// multi-path .update() — ব্যবহার করছি, যেটা Firebase-এ প্রকৃতপক্ষে atomic
+// (দুটো path-ই একসাথে সফল হবে নয়তো দুটোই ব্যর্থ হবে, আংশিক অবস্থা তৈরি হবে না)।
 function syncRole(uname, role){
   const u = DB.users.find(x=>x.u===uname);
   const doUpdate = uid => {
-    Promise.all([
-      firebase.database().ref('roles/'+uid).set({role}),
-      firebase.database().ref('users/'+uid+'/role').set(role)
-    ]).catch(e=>{
+    setRoleAtomic(uid, role).catch(e=>{
       console.error('syncRole failed for',uname,'→',role,':',e);
-      toast('❌ '+(u?.name||uname)+' এর role Firebase-এ সেভ ব্যর্থ! আবার চেষ্টা করুন — নাহলে পারমিশন সমস্যা থেকে যাবে।');
+      toast('❌ '+(u?.name||uname)+' এর role পরিবর্তন সম্পূর্ণ হয়নি! আবার চেষ্টা করুন — নাহলে আগের role-এর write-অধিকার তার কাছেই থেকে যাবে।');
     });
   };
   if(u?.uid){
@@ -463,11 +472,21 @@ function setManager(){
   // কিন্তু roles/{uid} আসলে 'member') sync-ই স্কিপ হয়ে যেত, array-তে যোগ
   // হওয়া সত্ত্বেও। এখন controller ছাড়া সবার জন্য প্রতিবার sync হবে —
   // idempotent, ক্ষতি নেই, কিন্তু drift permanently আটকে যাওয়া বন্ধ হলো।
-  if(u && u.role!=='controller'){ u.role='manager'; syncRole(uname,'manager'); }
+  if(u && u.role!=='controller'){
+    syncRole(uname,'manager');
+    // ⚠️ RACE FIX: saveUsers() (পুরো users[] blob overwrite) বাদ — শুধু এই
+    // uname-এর role field-টাই transaction দিয়ে বদলানো হয়, অন্য কারো
+    // concurrent প্রোফাইল/ভূমিকা পরিবর্তন হারায় না। বিস্তারিত: db.js
+    // updateUserRecord()।
+    updateUserRecord(uname, rec=>{ rec.role='manager'; return rec; });
+  }
   // ✅ FIX: saveDB() বাদ — targeted saves। managers=month data, users=global।
   // saveDB() → saveMonth() পুরো month array overwrite করত (race condition)।
+  // saveGlobal() বাদ — এই function cfg/siteNote/notice/shortfall কিছুই
+  // ছোঁয় না, অকারণে ডাকলে শুধু অন্য কারো cfg/shortfall পরিবর্তনকে
+  // ঝুঁকিতে ফেলত (একই GLOBAL_FIELDS blob-write সমস্যা)।
   currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
-  saveGlobal(); saveUsers(); renderManagerInfo();
+  renderManagerInfo();
   const sel=document.getElementById('mgr-remove');
   sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
   (DB.managers[month]||[]).forEach(u=>{ const usr=DB.users.find(x=>x.u===u); if(usr) sel.innerHTML+=`<option value="${esc(u)}">${esc(usr.name)}</option>`; });
@@ -482,10 +501,16 @@ function removeManager(){
   // ✅ FIX (2026-08): setManager()-এর মতো একই কারণে — শুধু u.role==='manager'
   // থাকলে demote হতো, stale হলে skip। এখন controller ছাড়া সবাই সবসময়
   // demote হবে, তাই removed manager-এর হাতে ভুলবশত write access থেকে যাবে না।
-  if(u && u.role!=='controller'){ u.role='member'; syncRole(uname,'member'); }
-  // ✅ FIX: targeted saves — managers path + global only
+  if(u && u.role!=='controller'){
+    syncRole(uname,'member');
+    // ⚠️ RACE FIX: saveUsers() blob-overwrite বাদ — updateUserRecord()
+    // transaction দিয়ে শুধু এই uname-এর role বদলায়।
+    updateUserRecord(uname, rec=>{ rec.role='member'; return rec; });
+  }
+  // ✅ FIX: targeted save — managers path only। saveGlobal() বাদ — এই
+  // function cfg/siteNote/notice/shortfall কিছুই ছোঁয় না।
   currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
-  saveGlobal(); saveUsers(); renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
+  renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
 }
 // saveCfg() — moved to js/rules.js (rules screen function, misplaced in ADMIN)
 // Extracted: 2026-05-19 | Original lines: 2509–2536
@@ -549,7 +574,15 @@ function saveEditMem(){
 
   // ✅ FIX: saveDB() বাদ — শুধু users (global data) পরিবর্তন হয়েছে।
   // saveDB() → saveMonth() month arrays overwrite করত।
-  saveGlobal(); saveUsers();
+  // ⚠️ RACE FIX: saveGlobal()+saveUsers() (blob overwrite) বাদ। এই ৫টা
+  // field (name/room/mob/job/type) — যেগুলো উপরে u-তে বসানো হয়েছে —
+  // সেগুলোই শুধু transaction দিয়ে Firebase-এর *fresh* array-তে বসানো হয়,
+  // তাই ঠিক এই মুহূর্তে অন্য কোনো সদস্যের নিজের প্রোফাইল সেভ (বা অন্য কোনো
+  // admin-এর ভিন্ন কারো এডিট) একসাথে ঘটলেও একে অপরের পরিবর্তন মুছে না।
+  updateUserRecord(uname, rec=>{
+    rec.name=u.name; rec.room=u.room; rec.mob=u.mob; rec.job=u.job; rec.type=u.type;
+    return rec;
+  });
 
   // ✅ users/{uid} path-ও update করো — না হলে refresh-এ পুরনো data ফিরে আসে
   if(u.uid){
@@ -591,12 +624,17 @@ function deleteMember(){
   showModal('সদস্য মুছুন',`${u?.name||uname} কে স্থায়ীভাবে মুছে ফেলবেন? সব ডেটা হারিয়ে যাবে!${balWarn}${mealWarn}`,()=>{
     // ✅ FIX: RTDB cleanup-এর জন্য uid আগেই নাও — DB.users filter করার পরে u হারিয়ে যাবে
     const targetUid = u?.uid;
-    DB.users=DB.users.filter(x=>x.u!==uname);
-    DB.controllers=DB.controllers.filter(c=>c!==uname);
+    // ⚠️ RACE FIX: DB.users=DB.users.filter(...) + saveUsers() (পুরো blob
+    // overwrite) বাদ — updateUserRecord(uname, ()=>null) transaction দিয়ে
+    // Firebase-এর fresh array থেকে শুধু এই একজনকেই বাদ দেয়, ঠিক তখন অন্য
+    // কারো (ভিন্ন সদস্যের) প্রোফাইল সেভ চলতে থাকলেও তা হারায় না। একইভাবে
+    // controllers-এও DB.controllers.filter()+saveControllers() এর বদলে
+    // updateControllers(uname, false)।
+    updateUserRecord(uname, ()=>null);
+    updateControllers(uname, false);
     Object.keys(DB.managers).forEach(m=>{ DB.managers[m]=(DB.managers[m]||[]).filter(u=>u!==uname); });
     // member মুছলে _minUserCount আপডেট — নাহলে false block
     if(typeof _minUserCount!=='undefined') _minUserCount=Math.max(0,new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size);
-    saveControllers(); saveGlobal(); saveUsers(); // ✅ controllers আলাদা path
     currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
     // ✅ FIX: শুধু বর্তমানে লোড করা মাস না — গত ২৪ মাসের ম্যানেজার
     // রেফারেন্স থেকেও এই সদস্যকে সরিয়ে দাও, একেবারে delete-এর মুহূর্তেই।
@@ -659,22 +697,30 @@ function addController(){
   if(!isOnline()){ noNetPopup(); return; }
   const uname=document.getElementById('ctrl-add-sel').value; if(!uname){ toast('❌ সদস্য নির্বাচন করুন!'); return; }
   if(DB.controllers.length>=5){ toast('❌ সর্বোচ্চ ৫ জন Controller রাখা যাবে!'); return; }
-  if(!DB.controllers.includes(uname)) DB.controllers.push(uname);
   const u=DB.users.find(x=>x.u===uname);
-  if(u){ u.role='controller'; syncRole(uname,'controller'); }
-  // ✅ controllers = controller-only path → saveControllers() আলাদা
-  saveControllers(); saveGlobal(); saveUsers(); renderControllerList(); toast('✅ Controller যোগ করা হয়েছে!');
+  if(u){
+    syncRole(uname,'controller');
+    // ⚠️ RACE FIX: u.role='controller'-এর সরাসরি mutation + saveUsers()
+    // (blob) বাদ — transaction দিয়ে শুধু এই uname-এর role বদলায়।
+    updateUserRecord(uname, rec=>{ rec.role='controller'; return rec; });
+  }
+  // ⚠️ RACE FIX: DB.controllers.push()+saveControllers() (blob overwrite)
+  // বাদ — updateControllers() transaction দিয়ে fresh array-তে যোগ করে।
+  updateControllers(uname, true);
+  renderControllerList(); toast('✅ Controller যোগ করা হয়েছে!');
 }
 function removeController(){
   if(!isOnline()){ noNetPopup(); return; }
   const uname=document.getElementById('ctrl-rem-sel').value; if(!uname){ toast('❌ Controller নির্বাচন করুন!'); return; }
   if(uname===CU.u){ toast('❌ নিজেকে Controller থেকে বাদ দেওয়া যাবে না!'); return; }
-  DB.controllers=DB.controllers.filter(c=>c!==uname);
   const u=DB.users.find(x=>x.u===uname);
-  if(u&&u.role==='controller'){ u.role='member'; }
   syncRole(uname,'member');
-  // ✅ controllers = controller-only path → saveControllers() আলাদা
-  saveControllers(); saveGlobal(); saveUsers(); renderControllerList(); toast('✅ Controller বাদ দেওয়া হয়েছে!');
+  // ⚠️ RACE FIX: DB.controllers.filter()+saveControllers() এবং
+  // u.role='member'+saveUsers() (দুটোই blob overwrite) বাদ — নিচের দুটো
+  // transaction-based helper দিয়ে শুধু এই uname-এর রেকর্ড বদলায়।
+  updateControllers(uname, false);
+  if(u&&u.role==='controller'){ updateUserRecord(uname, rec=>{ rec.role='member'; return rec; }); }
+  renderControllerList(); toast('✅ Controller বাদ দেওয়া হয়েছে!');
 }
 
 // ═══════════════════════════════════════════════

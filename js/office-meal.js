@@ -53,7 +53,12 @@ function saveOfficeMealRate(){
   if(isNaN(rate)||rate<0){ toast('❌ সঠিক রেট দিন!'); return; }
   if(!DB.officeMealRates) DB.officeMealRates={};
   DB.officeMealRates[mmKey]=rate;
-  saveMonth();
+  // ⚠️ RACE FIX: saveMonth() meals+managers+mealRates+officeMealRates —
+  // এই চারটাই blob-overwrite করত, শুধু rate বদলাতে চাইলেও। এখন শুধু
+  // officeMealRates/{mmKey} path-টাই লেখা হয় (db.js: saveOfficeMealRateEntry) —
+  // ঠিক এই মুহূর্তে অন্য কোনো সদস্যের meal toggle (granular path দিয়ে
+  // হওয়া) আর হারায় না।
+  saveOfficeMealRateEntry(mmKey, rate);
   loadOfficeMealInfo();
   toast('✅ অফিস মিল রেট সেভ হয়েছে! ৳'+rate.toFixed(2));
 }
@@ -338,7 +343,10 @@ function saveOfficeMealRateScreen(){
   if(isNaN(rate)||rate<0){ toast('❌ সঠিক রেট দিন!'); return; }
   if(!DB.officeMealRates) DB.officeMealRates={};
   DB.officeMealRates[mmKey] = rate;
-  saveMonth();
+  // ⚠️ RACE FIX: saveMonth() (meals সহ ৪টা field blob-overwrite) বাদ —
+  // saveOfficeMealRateEntry() শুধু officeMealRates/{mmKey}-টাই লেখে।
+  // বিস্তারিত: saveOfficeMealRate()-এর ওপরের কমেন্ট।
+  saveOfficeMealRateEntry(mmKey, rate);
   closeOfmsRateCfgPopup();
   loadOfficeMealScreen();
   toast('✅ অফিস মিল রেট সেভ: ৳'+rate.toFixed(2));

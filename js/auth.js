@@ -123,9 +123,11 @@ auth.onAuthStateChanged(fbUser=>{
         }
       }
       // Also fix role in RTDB if it had extra quotes
+      // ⚠️ FIX (2026-08-11): দুটো আলাদা .set() এর বদলে setRoleAtomic() (db.js)
+      // — single multi-path .update(), সত্যিকারের atomic। বিস্তারিত: db.js
+      // setRoleAtomic()-এর কমেন্ট, বা admin.js syncRole()।
       if(roleData?.role !== role){
-        firebase.database().ref('roles/'+uid).set({role}).catch(()=>{});
-        firebase.database().ref('users/'+uid+'/role').set(role).catch(()=>{});
+        setRoleAtomic(uid, role).catch(()=>{});
       }
 
       _waitUntilReady(()=>{
@@ -388,7 +390,9 @@ function doLogin(){
           }
         }
         // Auto-fix bad role value in RTDB if needed
-        if(roleData?.role !== role){ firebase.database().ref('roles/'+uid).set({role}).catch(()=>{}); firebase.database().ref('users/'+uid+'/role').set(role).catch(()=>{}); }
+        // ⚠️ FIX (2026-08-11): setRoleAtomic() — একই কারণ, উপরের doGoogleLogin/
+        // onAuthStateChanged flow-এর কমেন্ট দেখুন।
+        if(roleData?.role !== role){ setRoleAtomic(uid, role).catch(()=>{}); }
         if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
         // ── login processing শেষ — এখন flag clear করো ──────────────
         // _waitUntilReady-এর আগে clear করা হচ্ছে কারণ DB load হতে সময় লাগতে পারে।

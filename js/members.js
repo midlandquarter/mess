@@ -238,8 +238,14 @@ function toggleBlockMember(){
   const action=u.blocked?'আনব্লক':'ব্লক';
   showModal(`${action} করুন`,`${u.name} কে ${action} করবেন?`,()=>{
     u.blocked=!u.blocked;
-    // ✅ FIX: blocked field = global (users) data only — saveDB() বাদ
-    saveGlobal(); saveUsers();
+    // ⚠️ RACE FIX: saveGlobal()+saveUsers() (পুরো users[] blob overwrite)
+    // বাদ — updateUserRecord() transaction দিয়ে Firebase-এর fresh array-তে
+    // শুধু এই একজনের blocked field বসায় (rec.blocked=u.blocked — assignment,
+    // fresh কপিতে আবার টগল নয় — তাই ডাবল-ফ্লিপ হওয়ার সুযোগ নেই)। এখন এই
+    // ব্লক/আনব্লক-এর ঠিক ওই মুহূর্তে অন্য কোনো সদস্যের প্রোফাইল সেভ চললেও
+    // একে অপরের পরিবর্তন হারায় না। saveGlobal() বাদ — এই function cfg/
+    // siteNote/notice/shortfall কিছুই ছোঁয় না।
+    updateUserRecord(u.u, rec=>{ rec.blocked=u.blocked; return rec; });
     // ✅ users/{uid}/blocked sync — না হলে login-এ block কাজ করে না
     const doBlockSync = uid => {
       firebase.database().ref('users/'+uid+'/blocked').set(u.blocked||null).catch(()=>{});
@@ -308,6 +314,7 @@ function pfEditMode(on){
 function saveProfile(){
   if(!isOnline()){ noNetPopup(); return; }
   const cu=DB.users.find(x=>x.u===CU.u); if(!cu) return;
+  const _origUname=cu.u; // ⚠️ RACE FIX: এই ফাংশনের শুরুর (edit-এর আগের) uname — নিচে updateUserRecord()-এর lookup key হিসেবে দরকার, ID change হলেও cu.u বদলে যাবে
   const newName=sanitizeInput(document.getElementById('pf-edit-name').value);
   const newId=sanitizeInput(document.getElementById('pf-edit-id').value).toLowerCase();
   const newMob=sanitizeInput(document.getElementById('pf-edit-mob').value);
@@ -362,7 +369,22 @@ function saveProfile(){
   cu.email=newEmail||cu.email||'';
   cu.address=newAddr||cu.address||'';
 
-  saveGlobal(); saveUsers();
+  // ⚠️ RACE FIX: saveGlobal()+saveUsers() (২০০ জনের পুরো users[] blob
+  // overwrite) বাদ। এই ফাংশন যেকোনো একজন সদস্য নিজে চালাতে পারে — একই
+  // মুহূর্তে অন্য কেউ প্রোফাইল সেভ করলে (বা কোনো Manager কাউকে ব্লক/এডিট
+  // করলে) আগে যার write পরে পৌঁছাত সে অন্যজনের পরিবর্তন সম্পূর্ণ মুছে
+  // দিত। এখন transaction দিয়ে শুধু *এই* সদস্যের name/job/mob/room/email/
+  // address/emailVerified/u — এই নির্দিষ্ট field-গুলোই বদলায় (role/
+  // blocked/uid-এর মতো অন্য field যেগুলো এই ফাংশন ছোঁয়ইনি, সেগুলো fresh
+  // সার্ভার-কপিতে যা আছে তাই থেকে যায় — কারো concurrent ব্লক/রোল-পরিবর্তন
+  // ভুলবশত revert হয় না)। lookup সবসময় _origUname (edit-এর আগের id)
+  // দিয়ে হয়, ID change হলেও সঠিক রেকর্ড খুঁজে পায়।
+  updateUserRecord(_origUname, rec=>{
+    rec.u=cu.u; rec.name=cu.name; rec.job=cu.job; rec.mob=cu.mob;
+    rec.room=cu.room; rec.email=cu.email; rec.address=cu.address;
+    rec.emailVerified=cu.emailVerified;
+    return rec;
+  });
   // ✅ FIX: saveDB() বাদ — users = global data। ID change হলে
   // উপরেই transactions/meals individually save হয়েছে।
 

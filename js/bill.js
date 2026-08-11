@@ -33,7 +33,7 @@ function loadBill(){
   const sub=document.getElementById('bill-month-sub');
   if(lbl) lbl.textContent='মিল রেট — '+messMonthLabel();
   if(sub) sub.textContent=messMonthLabel();
-  const {bazar,others,othersAll,cookBillsTotal,cookBillsAll,total,totalMeals,cookMeals,officeMeals,netMeals,M,C,R,X,r1,pm,cookFoodCost,feastEntries}=calcMealRate(mmKey);
+  const {bazar,others,othersAll,cookBillsTotal,cookBillsAll,total,totalMeals,cookMeals,officeMeals,netMeals,M,C,R,X,r1,pm,cookFoodCost,feastEntries,feastTotal}=calcMealRate(mmKey);
   const cu=DB.users.find(x=>x.u===CU.u)||CU;
   const myMeals=messMonthMeals(CU.u,mmKey);
   const myNetMeals=getNetMemberMeals(CU.u,mmKey);
