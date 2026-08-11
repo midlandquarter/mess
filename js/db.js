@@ -859,7 +859,7 @@ function loadDB(){
             try{ showSc('login'); }catch(e){}
             try{
               const _kal=document.getElementById('login-alert');
-              if(_kal){ _kal.textContent='ℹ️ আপনার ভূমিকা পরিবর্তন হয়েছে। আবার লগইন করুন।'; _kal.className='alert alert-danger show'; }
+              if(_kal){ _kal.textContent='ℹ️ আপনার Role (Access) পরিবর্তন হয়েছে। আবার লগইন করুন।'; _kal.className='alert alert-danger show'; }
             }catch(e){}
             return; // এই listener call-এ আর কিছু করার নেই
           } else if(_myEntry.role && _myEntry.role!==CU.role){
