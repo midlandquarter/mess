@@ -1,6 +1,17 @@
 // ═══════════════════════════════════════════════
 // DEPOSIT / WITHDRAW
 // ═══════════════════════════════════════════════
+// ✅ UPGRADE: বাজার/অন্যান্য খরচের মতোই এখন দেখা যাবে কে এন্ট্রি দিয়েছে।
+// পুরনো transaction-এ `by` ফিল্ডে uname (uid) বসানো ছিল (bazar/others/rules
+// সবগুলোতে সবসময় CU.name বসে — শুধু deposit.js-ই ব্যতিক্রম ছিল)। নতুন
+// এন্ট্রি থেকে এখন CU.name-ই বসবে (bazar-এর মতো), কিন্তু পুরনো uid-ভিত্তিক
+// ডেটাও যেন সঠিক নাম দেখায়, তাই এই resolver — uid মিললে নাম বের করে, না
+// মিললে ধরে নেয় এটা ইতিমধ্যে একটা নাম (নতুন এন্ট্রি)।
+function resolveByName(byVal){
+  if(!byVal) return '';
+  const u=DB.users.find(x=>x.u===byVal);
+  return u ? u.name : byVal;
+}
 function initDeposit(){
   renderDepMyBalance();
   renderDepMyHistory();
@@ -63,7 +74,8 @@ function renderDepMyHistory(){
   } else {
     txs.forEach(tx=>{
       const bal=balMap[tx.id];
-      html+=`<div class="tx-item"><div class="tx-icon">${tx.type==='deposit'?'\u{1F4E5}':'\u{1F4E4}'}</div><div class="tx-info" style="flex:1"><div class="tx-name">${tx.type==='deposit'?'\u099C\u09AE\u09BE':'\u0989\u09A4\u09CD\u09A4\u09CB\u09B2\u09A8'}</div><div class="tx-meta">${fmtDate(tx.date)}${tx.note?' \u00B7 '+esc(tx.note):''}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><div class="${tx.type==='deposit'?'tx-amt-pos':'tx-amt-neg'}">${tx.type==='deposit'?'+':'\u2212'}\u09F3${tx.amount.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}</div><div style="font-size:10px;color:${bal>=0?'var(--success)':'var(--danger)'};font-weight:600">\u09AC\u09CD\u09AF\u09BE\u09B2\u09C7\u09A8\u09CD\u09B8: \u09F3${Math.abs(bal).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}</div></div></div>`;
+      const byName=resolveByName(tx.by);
+      html+=`<div class="tx-item"><div class="tx-icon">${tx.type==='deposit'?'\u{1F4E5}':'\u{1F4E4}'}</div><div class="tx-info" style="flex:1"><div class="tx-name">${tx.type==='deposit'?'\u099C\u09AE\u09BE':'\u0989\u09A4\u09CD\u09A4\u09CB\u09B2\u09A8'}</div><div class="tx-meta">${fmtDate(tx.date)}${byName?' \u00B7 '+esc(byName):''}${tx.note?' \u00B7 '+esc(tx.note):''}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><div class="${tx.type==='deposit'?'tx-amt-pos':'tx-amt-neg'}">${tx.type==='deposit'?'+':'\u2212'}\u09F3${tx.amount.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}</div><div style="font-size:10px;color:${bal>=0?'var(--success)':'var(--danger)'};font-weight:600">\u09AC\u09CD\u09AF\u09BE\u09B2\u09C7\u09A8\u09CD\u09B8: \u09F3${Math.abs(bal).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}</div></div></div>`;
     });
   }
   el.innerHTML=safeHTML(html)||'<p class="muted tc">\u0995\u09CB\u09A8\u09CB \u09B2\u09C7\u09A8\u09A6\u09C7\u09A8 \u09A8\u09C7\u0987</p>';
@@ -197,7 +209,7 @@ function saveDeposit(){
   const _origText = _btn ? _btn.textContent : '';
   if(_btn){ _btn.disabled=true; _btn.textContent='⏳ সেভ হচ্ছে...'; }
 
-  const _txi={id:genId(),uname,type,amount,date,note,by:CU.u};
+  const _txi={id:genId(),uname,type,amount,date,note,by:CU.name};
   DB.transactions.push(_txi);
   invalidateTxBalCache();
 
@@ -247,7 +259,8 @@ function renderDepHistory(){
     const html=txs.map(tx=>{
       const u=DB.users.find(x=>x.u===tx.uname);
       const editBtn=canEdit?`<button data-action="edit-tx" data-id="${tx.id}" style="background:rgba(26,107,60,.12);border:1px solid var(--primary);color:var(--primary);border-radius:7px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">✏️</button>`:'';
-      return`<div class="tx-item"><div class="tx-icon">${tx.type==='deposit'?'📥':'📤'}</div><div class="tx-info"><div class="tx-name">${esc(u?.name||tx.uname)}${u?.job?` <span style="font-size:11px;color:var(--text-light)">(${esc(u.job)})</span>`:''}</div><div class="tx-meta">${fmtDate(tx.date)}${tx.note?' · '+esc(tx.note):''}</div></div><div class="${tx.type==='deposit'?'tx-amt-pos':'tx-amt-neg'}" style="display:flex;align-items:center;gap:6px">${tx.type==='deposit'?'+':'−'}৳${tx.amount.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}${editBtn}</div></div>`;
+      const byName=resolveByName(tx.by);
+      return`<div class="tx-item"><div class="tx-icon">${tx.type==='deposit'?'📥':'📤'}</div><div class="tx-info"><div class="tx-name">${esc(u?.name||tx.uname)}${u?.job?` <span style="font-size:11px;color:var(--text-light)">(${esc(u.job)})</span>`:''}</div><div class="tx-meta">${fmtDate(tx.date)}${byName?' · '+esc(byName):''}${tx.note?' · '+esc(tx.note):''}</div></div><div class="${tx.type==='deposit'?'tx-amt-pos':'tx-amt-neg'}" style="display:flex;align-items:center;gap:6px">${tx.type==='deposit'?'+':'−'}৳${tx.amount.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}${editBtn}</div></div>`;
     }).join('');
     histEl.innerHTML = safeHTML(html)||'<p class="muted tc">কোনো লেনদেন নেই</p>';
     histEl.onclick = function(e){

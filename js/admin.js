@@ -81,8 +81,10 @@ function initAdmin(){
     // ✅ FIX: মাস dropdown বদলালে আগে ম্যানেজার তথ্য রিফ্রেশ হতো না — এখন হবে
     mgrMonSel.onchange = renderManagerInfo;
   }
-  document.getElementById('adm-dt').value=tod();
-  applyMessCycleBounds('adm-dt');
+  // ✅ UPGRADE: মিল আপডেট পেজের মতো ডিফল্ট আগামীকাল দেখাবে (আজকের তারিখ নয়)
+  document.getElementById('adm-dt').value=nextDay(tod());
+  applyMessCycleBounds('adm-dt', null, true); // extendToNext — পরের মেস মাসও যেন সিলেক্ট করা যায়
+  appendDayToBNLabel('adm-dt');
   _reconcileManagerRoles();
   _cleanOrphanManagerRefs();
   renderManagerInfo();
@@ -514,6 +516,31 @@ function removeManager(){
 }
 // saveCfg() — moved to js/rules.js (rules screen function, misplaced in ADMIN)
 // Extracted: 2026-05-19 | Original lines: 2509–2536
+// ✅ UPGRADE: "মিল এডিট" পপআপ খোলার সময় কল হয় — প্রতিবার আগামীকালের
+// তারিখ দিয়ে রিসেট করে দেয় (initAdmin() একবারই চলে, কিন্তু popup বারবার খোলা যায়)
+function openAdmMealPopup(){
+  const dt=document.getElementById('adm-dt');
+  if(dt){
+    dt.value=nextDay(tod());
+    applyMessCycleBounds('adm-dt', null, true);
+    appendDayToBNLabel('adm-dt');
+  }
+  loadAdmMeal();
+  tog('card-adm-meal');
+}
+// ✅ UPGRADE: মিল আপডেট পেজের মতো ‹ › বাটন দিয়ে তারিখ পরিবর্তন
+function shiftAdmDate(delta){
+  const dt=document.getElementById('adm-dt');
+  if(!dt || !dt.value) return;
+  const {minDate,maxDate}=getMessCycleBounds(null, true); // extendToNext
+  const d=new Date(dt.value); d.setDate(d.getDate()+delta);
+  const newDate=toISODate(d);
+  if(newDate<minDate||newDate>maxDate) return; // চক্রের বাইরে গেলে কিছু হবে না
+  dt.value=newDate;
+  updateDateLabel('adm-dt');
+  appendDayToBNLabel('adm-dt');
+  loadAdmMeal();
+}
 function loadAdmMeal(){
   const uname=document.getElementById('adm-mem').value, dateStr=document.getElementById('adm-dt').value;
   if(!uname||!dateStr){ document.getElementById('adm-pqo').style.display='none'; return; }
@@ -534,9 +561,16 @@ function saveAdmMeal(){
   const _admKey=admBuf.uname+'_'+admBuf.dateStr;
   const _admVal={b:{...admBuf.b},l:{...admBuf.l},d:{...admBuf.d}};
   DB.meals[_admKey]=_admVal;
+  // 🐛 BUG FIX: mealMmKey পাস করা হতো না — ফলে তারিখ পরের মেস মাসে পড়লেও
+  // (যেমন চক্রের শেষ দিন রাত ১০টার পর "১১ তারিখ" চালু করা হলে) এটা সবসময়
+  // currentMonthRef (চলতি মাসের bucket)-এ সেভ হতো। toast "✅ সেভ হয়েছে"
+  // দেখাত কিন্তু আসল ডেটা ভুল bucket-এ যেত, তাই পরের মাসের রিপোর্টে/মিল
+  // তালিকায় দেখা যেত না। meal.js-এর saveMeal() এর মতোই এখন সঠিক bucket
+  // বের করে পাঠানো হচ্ছে।
+  const _admMmKey = messMonthKey(new Date(admBuf.dateStr));
   // ✅ FIX: saveDB() বাদ — শুধু এই একটা meal entry save হবে।
   // saveDB() → saveMonth() → পুরো meals object overwrite (race condition)।
-  saveMealEntry(_admKey, _admVal);
+  saveMealEntry(_admKey, _admVal, _admMmKey);
   invalidateMealIndex(); invalidateMealRateCache(); invalidateMemberCountsCache();
   toast('✅ মিল আপডেট হয়েছে'); closeAdmPopup();
 }
