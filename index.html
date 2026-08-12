@@ -905,7 +905,7 @@ try{
       <div class="sec-title">⚙️ Admin কার্যক্রম</div>
       <div class="adm-item ctrl-only" onclick="tog('card-approval');initApprovalPanel()"><div class="adm-icon">🔔</div><div><div class="adm-lbl">সদস্য অনুমোদন <span id="approval-badge" style="display:none;background:var(--danger);color:#fff;border-radius:50%;padding:1px 7px;font-size:12px;font-weight:700;margin-left:4px;vertical-align:middle"></span></div><div class="adm-sub">নতুন রেজিস্ট্রেশন অনুমোদন / প্রত্যাখ্যান করুন</div></div></div>
       <div class="adm-item ctrl-only" onclick="tog('card-mgr')"><div class="adm-icon">👑</div><div><div class="adm-lbl">ম্যানেজার নিয়োগ</div><div class="adm-sub">প্রতি মাসের ম্যানেজার সেট করুন (সর্বোচ্চ ১০ জন)</div></div></div>
-      <div class="adm-item" onclick="tog('card-adm-meal')"><div class="adm-icon">🔓</div><div><div class="adm-lbl">যেকোনো সদস্যের মিল এডিট</div><div class="adm-sub">যেকোনো তারিখ — Lock নেই</div></div></div>
+      <div class="adm-item" onclick="openAdmMealPopup()"><div class="adm-icon">🔓</div><div><div class="adm-lbl">যেকোনো সদস্যের মিল এডিট</div><div class="adm-sub">যেকোনো তারিখ — Lock নেই</div></div></div>
       <div class="adm-item ctrl-only" onclick="tog('card-edit-mem')"><div class="adm-icon">✏️📃</div><div><div class="adm-lbl">সদস্যের তথ্য সম্পাদনা</div><div class="adm-sub">নাম, রুম, ফোন, ধরন পরিবর্তন</div></div></div>
       <div class="adm-item ctrl-only" onclick="tog('card-del-mem')"><div class="adm-icon">🗑️</div><div><div class="adm-lbl">সদস্য মুছে ফেলুন</div><div class="adm-sub">মেস ছেড়ে যাওয়া সদস্য ডিলিট</div></div></div>
       <div class="adm-item ctrl-only" onclick="tog('card-del-cycle')"><div class="adm-icon">🗓️</div><div><div class="adm-lbl">মেস চক্র ডিলিট</div><div class="adm-sub">সম্পন্ন চক্রের ডেটা Firebase থেকে মুছুন</div></div></div>
@@ -936,7 +936,17 @@ try{
     <div class="card" id="card-adm-meal" style="display:none">
       <div class="sec-title">🔓 মিল এডিট</div>
       <div class="form-group"><label class="form-label">সদস্য</label><select id="adm-mem" class="form-input" onchange="loadAdmMeal()"><option value="">-- নির্বাচন --</option></select></div>
-      <div class="form-group"><label class="form-label">তারিখ</label><span class="date-display-wrap"><input type="date" id="adm-dt" class="form-input" style="width:100%" onchange="loadAdmMeal();updateDateLabel('adm-dt')"><span class="date-display-label" id="adm-dt-lbl">-- তারিখ --</span></span></div>
+      <div class="form-group">
+        <label class="form-label">তারিখ</label>
+        <div class="date-nav" style="gap:6px">
+          <button type="button" class="date-nav-btn" style="width:32px;height:32px;font-size:17px" onclick="shiftAdmDate(-1)">‹</button>
+          <span class="date-display-wrap" style="flex:1">
+            <input type="date" id="adm-dt" class="form-input" style="width:100%" onchange="loadAdmMeal();updateDateLabel('adm-dt');appendDayToBNLabel('adm-dt')">
+            <span class="date-display-label" id="adm-dt-lbl">-- তারিখ --</span>
+          </span>
+          <button type="button" class="date-nav-btn" style="width:32px;height:32px;font-size:17px" onclick="shiftAdmDate(1)">›</button>
+        </div>
+      </div>
       <div id="adm-pqo" style="display:none">
         <div style="margin-bottom:12px"><b style="display:block;margin-bottom:6px">🌄 সকাল</b><div class="pqo-row"><input type="number" id="adm-qty-b" class="qty-input" value="1" min="1"><button class="pqo-btn" id="adm-b-P" onclick="setAdmPQO('b','P')">P</button><button class="pqo-btn" id="adm-b-Q" onclick="setAdmPQO('b','Q')">Q</button><button class="pqo-btn" id="adm-b-off" onclick="setAdmPQO('b','off')">off</button></div></div>
         <div style="margin-bottom:12px"><b style="display:block;margin-bottom:6px">☀️ দুপুর</b><div class="pqo-row"><input type="number" id="adm-qty-l" class="qty-input" value="1" min="1"><button class="pqo-btn" id="adm-l-P" onclick="setAdmPQO('l','P')">P</button><button class="pqo-btn" id="adm-l-Q" onclick="setAdmPQO('l','Q')">Q</button><button class="pqo-btn" id="adm-l-off" onclick="setAdmPQO('l','off')">off</button></div></div>
