@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v17'; // v17: few major bug fixed 
+const CACHE_VERSION = 'mq-v18'; // v18: Admin, deposit,index bug fix and some feature upgrade, please update overall all caches file forcefully
 
 const SHELL_ASSETS = [
   './',
