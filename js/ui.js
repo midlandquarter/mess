@@ -232,6 +232,7 @@ function sec(s){
   if(s==='members'){ loadMembers(); showSc('members'); return; }
   if(s==='profile'){ loadProfile(); showSc('profile'); return; }
   if(s==='admin'){ if(!isManagerOrCtrl()){ toast('❌ অনুমতি নেই!'); return; } initAdmin(); showSc('admin'); return; }
+  if(s==='roomreport'){ if(!isController()){ toast('❌ শুধুমাত্র Controller এক্সেস করতে পারবেন!'); return; } initRoomReport(); showSc('roomreport'); return; }
   if(s==='officemeal'){ initOfficeMealScreen(); showSc('officemeal'); return; }
   if(s==='messmanager'){ newMessManagerScreen(); return; }
   if(s==='notice'){ initNotice(); showSc('notice'); return; }

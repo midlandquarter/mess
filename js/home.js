@@ -104,6 +104,8 @@ function refreshHome(){
   document.getElementById('admin-btn').style.display=isManagerOrCtrl()?'block':'none';
   const rulesEl=document.getElementById('menu-rules');
   if(rulesEl) rulesEl.style.display=isManagerOrCtrl()?'block':'none';
+  const rrEl=document.getElementById('menu-roomreport');
+  if(rrEl) rrEl.style.display=isController()?'block':'none';
 
   // Auto-reset to today every time goHome is called fresh
   if(!homeViewDate) homeViewDate=null;

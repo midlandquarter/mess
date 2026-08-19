@@ -318,7 +318,6 @@ function saveProfile(){
   const newName=sanitizeInput(document.getElementById('pf-edit-name').value);
   const newId=sanitizeInput(document.getElementById('pf-edit-id').value).toLowerCase();
   const newMob=sanitizeInput(document.getElementById('pf-edit-mob').value);
-  const newRoom=sanitizeInput(document.getElementById('pf-edit-room').value);
   const newEmail=sanitizeInput(document.getElementById('pf-edit-email').value).toLowerCase();
   const newAddr=sanitizeInput(document.getElementById('pf-edit-addr').value);
 
@@ -365,7 +364,6 @@ function saveProfile(){
   const newJob=sanitizeInput(document.getElementById('pf-edit-job').value);
   if(newJob) { cu.job=newJob; CU.job=newJob; }
   if(newMob) cu.mob=newMob;
-  if(newRoom) cu.room=newRoom;
   cu.email=newEmail||cu.email||'';
   cu.address=newAddr||cu.address||'';
 
@@ -373,15 +371,17 @@ function saveProfile(){
   // overwrite) বাদ। এই ফাংশন যেকোনো একজন সদস্য নিজে চালাতে পারে — একই
   // মুহূর্তে অন্য কেউ প্রোফাইল সেভ করলে (বা কোনো Manager কাউকে ব্লক/এডিট
   // করলে) আগে যার write পরে পৌঁছাত সে অন্যজনের পরিবর্তন সম্পূর্ণ মুছে
-  // দিত। এখন transaction দিয়ে শুধু *এই* সদস্যের name/job/mob/room/email/
-  // address/emailVerified/u — এই নির্দিষ্ট field-গুলোই বদলায় (role/
+  // দিত। এখন transaction দিয়ে শুধু *এই* সদস্যের name/job/mob/email/
+  // address/emailVerified/u — এই নির্দিষ্ট field-গুলোই বদলায় (room/role/
   // blocked/uid-এর মতো অন্য field যেগুলো এই ফাংশন ছোঁয়ইনি, সেগুলো fresh
   // সার্ভার-কপিতে যা আছে তাই থেকে যায় — কারো concurrent ব্লক/রোল-পরিবর্তন
   // ভুলবশত revert হয় না)। lookup সবসময় _origUname (edit-এর আগের id)
-  // দিয়ে হয়, ID change হলেও সঠিক রেকর্ড খুঁজে পায়।
+  // দিয়ে হয়, ID change হলেও সঠিক রেকর্ড খুঁজে পায়। ✅ room এখন শুধু
+  // admin/controller edit-member প্যানেল থেকেই বদলানো যাবে — নিজের
+  // profile থেকে room self-edit বন্ধ করা হয়েছে।
   updateUserRecord(_origUname, rec=>{
     rec.u=cu.u; rec.name=cu.name; rec.job=cu.job; rec.mob=cu.mob;
-    rec.room=cu.room; rec.email=cu.email; rec.address=cu.address;
+    rec.email=cu.email; rec.address=cu.address;
     rec.emailVerified=cu.emailVerified;
     return rec;
   });
@@ -393,7 +393,6 @@ function saveProfile(){
     firebase.database().ref('users/'+CU.uid).update({
       name:    cu.name,
       mobile:  cu.mob||'',
-      room:    cu.room||'',
       jobId:   cu.job||'',
       address: cu.address||'',
     }).catch(e=>console.warn('Profile uid sync error:',e));

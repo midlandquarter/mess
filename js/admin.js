@@ -587,6 +587,8 @@ function loadEditMem(){
   document.getElementById('edit-mem-job').value=u.job||'';
   document.getElementById('edit-mem-type').value=u.type||'inside';
   document.getElementById('edit-mem-joined').textContent=u.joined||'—';
+  const remEl=document.getElementById('edit-mem-remarks');
+  if(remEl) remEl.value=u.remarks||'';
 }
 function saveEditMem(){
   if(!isOnline()){ noNetPopup(); return; }
@@ -597,24 +599,28 @@ function saveEditMem(){
   const newMob=sanitizeInput(document.getElementById('edit-mem-mob').value);
   const newJob=sanitizeInput(document.getElementById('edit-mem-job').value).slice(0,30);
   const newType=document.getElementById('edit-mem-type').value;
+  const remEl=document.getElementById('edit-mem-remarks');
+  const newRemarks=remEl ? sanitizeInput(remEl.value,300) : (u.remarks||'');
   if(newName && !validName(newName)){ toast('❌ নাম সঠিক নয়!'); return; }
   if(newMob && !validMobile(newMob)){ toast('❌ মোবাইল নম্বর সঠিক নয়!'); return; }
   if(newName) u.name=newName;
   u.room=newRoom;
   if(newMob) u.mob=newMob;
   u.job=newJob;
+  u.remarks=newRemarks;
   // joined ও activeFrom edit করা নিষিদ্ধ — registration-এ set হয়, পরে অপরিবর্তনীয়
   if(['inside','outside','cook'].includes(newType)) u.type=newType;
 
   // ✅ FIX: saveDB() বাদ — শুধু users (global data) পরিবর্তন হয়েছে।
   // saveDB() → saveMonth() month arrays overwrite করত।
-  // ⚠️ RACE FIX: saveGlobal()+saveUsers() (blob overwrite) বাদ। এই ৫টা
-  // field (name/room/mob/job/type) — যেগুলো উপরে u-তে বসানো হয়েছে —
+  // ⚠️ RACE FIX: saveGlobal()+saveUsers() (blob overwrite) বাদ। এই ৬টা
+  // field (name/room/mob/job/type/remarks) — যেগুলো উপরে u-তে বসানো হয়েছে —
   // সেগুলোই শুধু transaction দিয়ে Firebase-এর *fresh* array-তে বসানো হয়,
   // তাই ঠিক এই মুহূর্তে অন্য কোনো সদস্যের নিজের প্রোফাইল সেভ (বা অন্য কোনো
   // admin-এর ভিন্ন কারো এডিট) একসাথে ঘটলেও একে অপরের পরিবর্তন মুছে না।
   updateUserRecord(uname, rec=>{
     rec.name=u.name; rec.room=u.room; rec.mob=u.mob; rec.job=u.job; rec.type=u.type;
+    rec.remarks=u.remarks;
     return rec;
   });
 
