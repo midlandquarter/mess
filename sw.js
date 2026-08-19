@@ -56,17 +56,37 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v18'; // v18: Admin, deposit,index bug fix and some feature upgrade, please update overall all caches file forcefully
+const CACHE_VERSION = 'mq-v19'; // v19: fix — style.css ও js/*.js SHELL_ASSETS-এ ছিল না, তাই দুর্বল/অফলাইন নেটওয়ার্কে UI অনস্টাইল্ড হয়ে ভেঙে যেত
 
 const SHELL_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './favicon.ico',
   './icon-192.png',
   './icon-512.png',
   './icon-192-maskable.png',
   './icon-512-maskable.png',
+  './style.css',
+  './js/config.js',
+  './js/utils.js',
+  './js/shared/core.js',
+  './js/db.js',
+  './js/bazar.js',
+  './js/meal.js',
+  './js/office-meal.js',
+  './js/home.js',
+  './js/auth.js',
+  './js/ui.js',
+  './js/rules.js',
+  './js/admin.js',
+  './js/notice.js',
+  './js/others.js',
+  './js/members.js',
+  './js/report.js',
+  './js/bill.js',
+  './js/deposit.js',
+  './js/helpers.js',
+  './js/push.js',
 ];
 
 const EXTERNAL_ASSETS = [

@@ -473,6 +473,7 @@ try{
       <div class="menu-item" onclick="sec('members')"><div class="menu-icon">👥</div><div class="menu-lbl">সদস্য তালিকা</div><div class="menu-sub">All Members</div></div>
       <div class="menu-item in" id="menu-rules" onclick="sec('rules')"><div class="menu-icon">📋</div><div class="menu-lbl">নিয়মাবলী</div><div class="menu-sub">Rules</div></div>
       <div class="menu-item dg" id="admin-btn" onclick="sec('admin')" style="display:none"><div class="menu-icon">⚙️</div><div class="menu-lbl">Admin Panel</div><div class="menu-sub">পরিচালনা</div></div>
+      <div class="menu-item dg" id="menu-roomreport" onclick="sec('roomreport')" style="display:none"><div class="menu-icon">🏠</div><div class="menu-lbl">Room Report</div><div class="menu-sub">রুম/সিট তালিকা</div></div>
     </div>
   </div>
   <div class="bottom-nav">
@@ -501,14 +502,6 @@ try{
       </div>
     </div>
     <div id="meal-lock-notice" class="alert alert-danger" style="display:none">🔒 এই তারিখের মিল পরিবর্তন করা যাবে না। রাত ১০টার পর পরবর্তী দিনের মিলও পরিবর্তন করা যাবে না। Manager এর মাধ্যমে করুন।</div>
-    <div class="card" style="padding:14px 18px;">
-      <div class="legend">
-        <span class="tag-P">P = প্ল্যান্ট</span>
-        <span class="tag-Q">Q = কোয়ার্টার</span>
-        <span class="tag-off">off = বন্ধ</span>
-      </div>
-      <p style="font-size:11px;color:var(--text-light);margin-top:6px">সংখ্যা × মিল মান = মোট মিল। যেমন সকালে ২ দিলে = ২×০.৭৫ = ১.৫ মিল</p>
-    </div>
     <!-- Breakfast -->
     <div class="meal-card">
       <div class="meal-hd">
@@ -789,6 +782,29 @@ try{
   </div>
 </div>
 
+<!-- ═══════════ ROOM REPORT (Controller only) ═══════════ -->
+<div id="sc-roomreport" class="screen">
+  <div class="app-header">
+    <button class="header-back" onclick="goHome()">← Home</button>
+    <div class="header-title">🏠 Room Report</div>
+    <div class="header-sub">রুম/সিট অনুযায়ী সদস্য তালিকা</div>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="sec-title">🔍 Filter</div>
+      <div class="form-group">
+        <label class="form-label">সদস্যের ধরন</label>
+        <select id="rr-type-filter" class="form-input">
+          <option value="all">সব</option>
+          <option value="inside">ইনসাইড</option>
+          <option value="outside">আউটসাইড</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="openRoomReport()">📊 রিপোর্ট দেখুন</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MEMBER DETAIL ═══════════ -->
 <div id="sc-memdetail" class="screen">
   <div class="app-header">
@@ -870,7 +886,8 @@ try{
       </div>
       <div class="form-group">
         <label class="form-label">রুম নম্বর</label>
-        <input type="text" id="pf-edit-room" class="form-input" placeholder="রুম নম্বর">
+        <input type="text" id="pf-edit-room" class="form-input" readonly style="background:var(--bg,#f0f2f0);color:var(--text-light);cursor:not-allowed;">
+        <div style="font-size:11px;color:var(--text-light);margin-top:4px;">🔒 রুম পরিবর্তনের জন্য এডমিনের সাথে যোগাযোগ করুন</div>
       </div>
       <div class="form-group">
         <label class="form-label">ইমেইল <span style="font-size:11px;color:var(--text-light)">(ইমেইল পরিবর্তন করবেন না)</span></label>
@@ -976,7 +993,8 @@ try{
             <option value="cook">বাবুর্চি</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">যোগদানের তারিখ</label><div id="edit-mem-joined" style="padding:10px 0;color:var(--text-light);font-size:14px;">—</div></div>
+        <div class="form-group"><label class="form-label">App-এ যোগদানের তারিখ</label><div id="edit-mem-joined" style="padding:10px 0;color:var(--text-light);font-size:14px;">—</div></div>
+        <div class="form-group"><label class="form-label">মন্তব্য (Remarks)</label><textarea id="edit-mem-remarks" class="form-input" rows="2" maxlength="300" placeholder="মন্তব্য লিখুন"></textarea></div>
         <button class="btn btn-primary" onclick="saveEditMem()">✅ সংরক্ষণ করুন</button>
       </div>
     </div>
@@ -1360,6 +1378,7 @@ try{
 <script src="js/others.js"></script>
 <script src="js/members.js"></script>
 <script src="js/report.js"></script>
+<script src="js/room-report.js"></script>
 <script src="js/bill.js"></script>
 <script src="js/deposit.js"></script>
 <script src="js/helpers.js"></script>
