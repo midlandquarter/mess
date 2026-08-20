@@ -986,6 +986,183 @@ function downloadDayPDF(){
 }
 
 // ═══════════════════════════════════════════════
+// DAILY MEAL SHEET — HD PNG (একই ডিজাইন, শুধু PDF-এর বদলে
+// সরাসরি একটা লম্বা high-resolution ছবি ডাউনলোড হয়)
+//
+// ইচ্ছাকৃতভাবে downloadDayPDF()-এর থেকে সম্পূর্ণ আলাদা,
+// স্বনির্ভর ফাংশন হিসেবে লেখা হয়েছে (ডেটা/HTML-বানানোর
+// লজিক ইচ্ছাকৃতভাবে duplicate করা) — যাতে এটা যোগ করতে
+// গিয়ে existing, কাজ-করা PDF ফাংশনটার একটা লাইনও ছুঁতে
+// না হয়। ছবির কোনো A4-page উচ্চতার সীমা নেই বলে
+// downloadDayPDF()-এর মতো measurement/chunking লজিক এখানে
+// লাগেনি — পুরো টেবিল (সবগুলো row + grand total) একটাই
+// canvas-এ বসে, যত লম্বাই হোক।
+// ═══════════════════════════════════════════════
+function downloadDayImage(){
+  if(typeof html2canvas === 'undefined'){
+    toast('❌ html2canvas লোড হয়নি! পেজ রিফ্রেশ করুন।');
+    console.error('html2canvas not loaded');
+    return;
+  }
+  toast('⏳ শুরু হচ্ছে...');
+  try{
+  const dt = homeViewDate || tod();
+  const dtObj = new Date(dt+'T00:00:00');
+  const dd=String(dtObj.getDate()).padStart(2,'0');
+  const mm=String(dtObj.getMonth()+1).padStart(2,'0');
+  const yy=String(dtObj.getFullYear()).slice(2);
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const dayName=days[dtObj.getDay()];
+
+  // ── Totals (downloadDayPDF()-এর সাথে অভিন্ন হিসাব) ──
+  let totBQ=0,totLQ=0,totDQ=0,totBM=0,totLM=0,totDM=0;
+  const activeUsers = DB.users.filter(u=>!u.blocked && isActiveInMonth(u, messMonthKey()));
+  activeUsers.forEach(u=>{
+    const meal=DB.meals[u.u+'_'+dt]||{};
+    const bm=meal.b||{t:'off',q:1}, lm=meal.l||{t:'off',q:1}, dm=meal.d||{t:'off',q:1};
+    if(bm.t!=='off'){ totBQ+=(bm.q||1); totBM+=mTV('b',bm,dt,u.type); }
+    if(lm.t!=='off'){ totLQ+=(lm.q||1); totLM+=mTV('l',lm,dt,u.type); }
+    if(dm.t!=='off'){ totDQ+=(dm.q||1); totDM+=mTV('d',dm,dt,u.type); }
+  });
+  const grandTotal=(totBM+totLM+totDM).toFixed(2);
+
+  // ── Sort by job ID ──
+  const sorted = [...activeUsers].sort((a,b)=>{
+    const aj=parseInt(a.job)||0, bj=parseInt(b.job)||0;
+    if(aj&&bj) return aj-bj;
+    return String(a.job||'').localeCompare(String(b.job||''));
+  });
+
+  function _mCells(u){
+    if(!u) return '<td></td><td></td><td></td><td></td><td></td><td></td>';
+    const meal=DB.meals[u.u+'_'+dt]||{};
+    const bm=meal.b||{t:'off',q:1}, lm=meal.l||{t:'off',q:1}, dm=meal.d||{t:'off',q:1};
+    const bv=mTV('b',bm,dt,u.type), lv=mTV('l',lm,dt,u.type), dv=mTV('d',dm,dt,u.type);
+    const tot=(bv+lv+dv);
+    const isOff=(bm.t==='off'&&lm.t==='off'&&dm.t==='off');
+    const mc=(m)=>{
+      if(m.t==='off') return `<td style="text-align:center;color:#ccc;padding:1px 2px;font-size:9px;">—</td>`;
+      const q=m.q&&m.q>1?'×'+m.q:'';
+      const c=m.t==='P'?'#16a34a':'#2563eb';
+      return `<td style="text-align:center;font-weight:700;color:${c};padding:1px 2px;font-size:9px;">${m.t+q}</td>`;
+    };
+    return `
+      <td style="padding:1px 3px;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;">${String(u.job||u.u).substring(0,8)}</td>
+      <td style="padding:1px 3px;font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:145px;">${(u.name||'').substring(0,40)}</td>
+      <td style="text-align:right;padding:1px 4px;font-size:9px;font-weight:700;color:${isOff?'#ccc':'#1a2e22'};">${isOff?'—':tot.toFixed(2)}</td>
+      ${mc(bm)}${mc(lm)}${mc(dm)}`;
+  }
+
+  const _half=Math.ceil(sorted.length/2);
+  const rowHtmlArr=[];
+  for(let i=0;i<_half;i++){
+    const uL=sorted[i], uR=sorted[i+_half];
+    const bg=i%2===0?'#f5f9f5':'#ffffff';
+    rowHtmlArr.push(`<tr style="background:${bg};border-top:1px solid #e8f0eb;">
+      ${_mCells(uL)}
+      <td style="width:6px;background:#c4d9c4;padding:0;"></td>
+      ${_mCells(uR)}
+    </tr>`);
+  }
+
+  const WRAP_W=720;
+  const _thead=`<thead>
+    <tr style="background:#1a6b3c;color:#fff;font-size:9px;">
+      <th style="padding:3px 3px;text-align:left;width:48px;">ID</th>
+      <th style="padding:3px 3px;text-align:left;width:130px;">নাম</th>
+      <th style="padding:3px 4px;text-align:right;width:40px;">Total</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">সকাল</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">দুপুর</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">রাত</th>
+      <th style="width:6px;background:#0f4526;padding:0;"></th>
+      <th style="padding:3px 3px;text-align:left;width:48px;">ID</th>
+      <th style="padding:3px 3px;text-align:left;width:130px;">নাম</th>
+      <th style="padding:3px 4px;text-align:right;width:40px;">Total</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">সকাল</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">দুপুর</th>
+      <th style="padding:3px 2px;text-align:center;width:38px;">রাত</th>
+    </tr>
+  </thead>`;
+  const _tfoot=`<tfoot>
+    <tr style="background:#0f4526;color:#fff;font-weight:700;font-size:9px;">
+      <td colspan="2" style="padding:3px 4px;">Grand Total</td>
+      <td style="padding:3px 4px;text-align:right;color:#fcd34d;">${grandTotal}</td>
+      <td style="padding:3px 2px;text-align:center;">${totBQ}(${totBM.toFixed(2)})</td>
+      <td style="padding:3px 2px;text-align:center;">${totLQ}(${totLM.toFixed(2)})</td>
+      <td style="padding:3px 2px;text-align:center;">${totDQ}(${totDM.toFixed(2)})</td>
+      <td style="background:#0a3520;padding:0;"></td>
+      <td colspan="6" style="padding:3px 4px;text-align:center;font-size:8px;color:rgba(255,255,255,.7);">P=Plant · Q=Quarter · off=— · Generated: ${dd}.${mm}.20${yy}</td>
+    </tr>
+  </tfoot>`;
+  const _header=`
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a6b3c;padding-bottom:5px;margin-bottom:7px;">
+      <div style="font-size:13px;font-weight:700;color:#1a6b3c;">Daily Meal Sheet</div>
+      <div><span style="font-size:12px;font-weight:700;">${dd}-${mm}-20${yy}</span><span style="font-size:9px;color:#666;margin-left:5px;">${dayName}</span></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:7px;">
+      <div style="flex:1;background:#fff8f0;border:1px solid #f0a05a;border-radius:4px;padding:3px 5px;text-align:center;">
+        <div style="font-size:8px;color:#888;">Morning</div>
+        <div style="font-size:12px;font-weight:700;color:#ea580c;">${totBQ}<span style="font-size:8px;font-weight:400;"> (${totBM.toFixed(2)})</span></div>
+      </div>
+      <div style="flex:1;background:#f0fff4;border:1px solid #5abf7a;border-radius:4px;padding:3px 5px;text-align:center;">
+        <div style="font-size:8px;color:#888;">Lunch</div>
+        <div style="font-size:12px;font-weight:700;color:#16a34a;">${totLQ}<span style="font-size:8px;font-weight:400;"> (${totLM.toFixed(2)})</span></div>
+      </div>
+      <div style="flex:1;background:#f0f4ff;border:1px solid #5a7abf;border-radius:4px;padding:3px 5px;text-align:center;">
+        <div style="font-size:8px;color:#888;">Night</div>
+        <div style="font-size:12px;font-weight:700;color:#2563eb;">${totDQ}<span style="font-size:8px;font-weight:400;"> (${totDM.toFixed(2)})</span></div>
+      </div>
+      <div style="flex:1;background:#1a6b3c;border-radius:4px;padding:3px 5px;text-align:center;">
+        <div style="font-size:8px;color:rgba(255,255,255,.75);">Total</div>
+        <div style="font-size:12px;font-weight:700;color:#fff;">${grandTotal}</div>
+      </div>
+    </div>`;
+
+  // ✅ পুরো টেবিল (সব row + tfoot) একবারেই — pagination নেই
+  const fullHtml=`<div style="font-family:Arial,sans-serif;background:#fff;padding:8px 12px;width:${WRAP_W}px;color:#1a2e22;">
+    ${_header}
+    <table style="width:100%;border-collapse:collapse;">
+      ${_thead}<tbody>${rowHtmlArr.join('')}</tbody>${_tfoot}
+    </table>
+  </div>`;
+
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:absolute;left:-9999px;top:0;z-index:-1;';
+  wrap.innerHTML=fullHtml;
+  document.body.appendChild(wrap);
+  void wrap.offsetHeight; // layout flush নিশ্চিত করো
+
+  // ✅ Adaptive resolution: সদস্য সংখ্যা কম হলে (ছোট শিট) অনেক বেশি scale
+  // পাবে (৬-৮K পর্যন্ত), সদস্য সংখ্যা বেশি হলে (লম্বা শিট) নিজে থেকেই
+  // scale কমিয়ে নেবে — যাতে বড় মেসেও ছবি বানাতে গিয়ে ফোনের ব্রাউজার
+  // মেমরির অভাবে হ্যাং/ক্র্যাশ না করে। MAX_CANVAS_PX-এর বেশি কোনো
+  // dimension-এ যাওয়া হয় না — এটাই আসল নিরাপত্তার সীমা।
+  const naturalH=wrap.firstChild.offsetHeight;
+  const MAX_CANVAS_PX=6000;
+  const IDEAL_SCALE=8;
+  let scale=Math.min(IDEAL_SCALE, MAX_CANVAS_PX/WRAP_W, MAX_CANVAS_PX/naturalH);
+  scale=Math.max(scale,3); // আগের version-এর scale:3-এর চেয়ে কখনো কম না
+
+  toast('⏳ ছবি তৈরি হচ্ছে...');
+  html2canvas(wrap.firstChild,{scale:scale,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
+    document.body.removeChild(wrap);
+    const link=document.createElement('a');
+    link.href=canvas.toDataURL('image/png');
+    link.download=`${dd}.${mm}.${yy}_mealsheet.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast(`✅ ছবি ডাউনলোড হয়েছে! (${canvas.width}×${canvas.height})`);
+  }).catch(e=>{
+    if(wrap.parentNode) document.body.removeChild(wrap);
+    toast('❌ ছবি তৈরিতে সমস্যা! (মেমরি কম থাকতে পারে)');
+    console.error('downloadDayImage error:', e);
+  });
+
+  } catch(err){ toast('❌ Error: '+err.message); console.error('downloadDayImage error:',err); }
+}
+
+// ═══════════════════════════════════════════════
 // PDF — English, proper grid table layout
 // ═══════════════════════════════════════════════
 // Helper: convert Bengali/Unicode text to ASCII-safe for jsPDF
