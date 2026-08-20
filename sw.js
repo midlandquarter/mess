@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v19'; // v19: fix — style.css ও js/*.js SHELL_ASSETS-এ ছিল না, তাই দুর্বল/অফলাইন নেটওয়ার্কে UI অনস্টাইল্ড হয়ে ভেঙে যেত
+const CACHE_VERSION = 'mq-v20'; // V20: added image download meal sheet please upgrade All file
 
 const SHELL_ASSETS = [
   './',
