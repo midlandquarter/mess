@@ -70,9 +70,9 @@ function loadMealDate(){
   document.getElementById('meal-sub').textContent=fmtDate(mealDate);
   const todStr=tod(), hour=getBSTHour();
   const tmr=nextDay(todStr);
-  // Lock rules: past dates always locked for non-admin. Tomorrow after 10pm locked.
+  // Lock rules: past dates always locked for non-admin. Tomorrow after 9pm locked.
   const diff=dateDiff(todStr,mealDate);
-  const locked=!isManagerOrCtrl()&&(diff<0||(diff===1&&hour>=22)||(diff===0));
+  const locked=!isManagerOrCtrl()&&(diff<0||(diff===1&&hour>=21)||(diff===0));
   document.getElementById('meal-lock-notice').style.display=locked?'block':'none';
   const meal=DB.meals[CU.u+'_'+mealDate]||{b:{t:'off',q:1},l:{t:'off',q:1},d:{t:'off',q:1}};
   ['b','l','d'].forEach(t=>{
