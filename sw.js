@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v20'; // V20: added image download meal sheet please upgrade All file
+const CACHE_VERSION = 'mq-v21'; // V21: Meal update lock Time change please upgrade All file
 
 const SHELL_ASSETS = [
   './',
