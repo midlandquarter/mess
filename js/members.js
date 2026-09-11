@@ -74,25 +74,31 @@ function toggleManagerView(){
     btn.style.color='#fff';
     btn.style.borderColor='var(--primary)';
     // Render manager list
+    // ⚠️ CRITICAL FIX (2026-09-11): আগে DB.managers[mmKey] সরাসরি in-memory
+    // থেকে পড়া হতো, যা সেশন-শুরুর সময়ের "বর্তমান মাস" থেকে একবারই লোড
+    // হয়েছিল — ফলে অন্য সময়ে সেভ করা ডেটা এখানে দেখা যেত না। এখন সবসময়
+    // loadManagersForMonth() দিয়ে টাটকা পড়া হয়।
     const mmKey=messMonthKey();
-    const mgrs=(DB.managers&&DB.managers[mmKey])||[];
     const content=document.getElementById('mgr-list-content');
-    if(!mgrs.length){
-      content.innerHTML='<p class="muted tc" style="padding:12px">এই মাসে কোনো ম্যানেজার নেই</p>';
-      return;
-    }
-    const mnames=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
-    const [my,mm]=mmKey.split('-').map(Number);
-    const nm=mm===12?1:mm+1;
-    content.innerHTML=`<div style="font-size:11px;color:var(--text-light);margin-bottom:8px;font-weight:600;">👑 ${mnames[mm-1]} ১১ – ${mnames[nm-1]} ১০, ${my}</div>`
-      + mgrs.map(u=>{
-          const usr=DB.users.find(x=>x.u===u);
-          if(!usr) return '';
-          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
-            <div style="width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">${usr.name[0].toUpperCase()}</div>
-            <div><div style="font-weight:600;font-size:13px">${usr.name}</div><div style="font-size:11px;color:var(--text-light)">ID- ${usr.job||'—'} · রুম ${usr.room||'—'}</div></div>
-          </div>`;
-        }).join('');
+    content.innerHTML='<p class="muted tc" style="padding:12px">লোড হচ্ছে...</p>';
+    loadManagersForMonth(mmKey).then(mgrs=>{
+      if(!mgrs.length){
+        content.innerHTML='<p class="muted tc" style="padding:12px">এই মাসে কোনো ম্যানেজার নেই</p>';
+        return;
+      }
+      const mnames=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
+      const [my,mm]=mmKey.split('-').map(Number);
+      const nm=mm===12?1:mm+1;
+      content.innerHTML=`<div style="font-size:11px;color:var(--text-light);margin-bottom:8px;font-weight:600;">👑 ${mnames[mm-1]} ১১ – ${mnames[nm-1]} ১০, ${my}</div>`
+        + mgrs.map(u=>{
+            const usr=DB.users.find(x=>x.u===u);
+            if(!usr) return '';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+              <div style="width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">${usr.name[0].toUpperCase()}</div>
+              <div><div style="font-weight:600;font-size:13px">${usr.name}</div><div style="font-size:11px;color:var(--text-light)">ID- ${usr.job||'—'} · রুম ${usr.room||'—'}</div></div>
+            </div>`;
+          }).join('');
+    });
   }
 }
 

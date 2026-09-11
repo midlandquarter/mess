@@ -353,32 +353,86 @@ function resetHandoverLock(){
 // ✅ FIX: চলতি মাসের ম্যানেজার লিস্টে নেই এমন কারো role এখনো 'manager' থেকে
 // গেলে (আগের মাসে সেট হয়েছিল, কখনো বাদ দেওয়া হয়নি) সেটা 'member'-এ ফিরিয়ে
 // দাও — নাহলে stale manager-level অ্যাক্সেস থেকে যায় (badge ছাড়াও)।
+// ⚠️ CRITICAL FIX (2026-09-11): এই ফাংশন roles/{uid}-এ (আসল, Firebase-rules
+// চেক-করা পারমিশন রেকর্ড) লেখার চেষ্টা করে setRoleAtomic() দিয়ে — আর
+// database rules অনুযায়ী ওই path-এ লেখার অনুমতি শুধুই Controller-এর, Manager
+// নয়। কিন্তু Admin স্ক্রিন Manager আর Controller — দুজনেই খুলতে পারেন, আর
+// আগে এই ফাংশন স্ক্রিন খোলা মাত্রই স্বয়ংক্রিয়ভাবে চলত, কে খুলেছেন তা না
+// দেখেই। ফলে কোনো Manager-এর সেশনে এটা চললে: সদস্য-তালিকায় "Member" বসানো
+// অংশ (updateUserRecord — শুধু লগইন থাকলেই চলে) সফল হতো, কিন্তু roles/{uid}
+// বদলানোর অংশ (syncRole → setRoleAtomic, Controller ছাড়া রিজেক্ট হয়) সাইলেন্টলি
+// ব্যর্থ হতো। ফলাফল: সদস্য-তালিকায় "Member", অথচ আসল এক্সেস "Manager"ই
+// থেকে যেত — কারো অজান্তে, কোনো error না দেখিয়ে। এখন শুধু Controller
+// সেশনেই চলবে, যাতে এই লেখা কখনো আধা-আধি না থামে।
 function _reconcileManagerRoles(){
-  const curMgrs = DB.managers[messMonthKey()]||[];
-  let changed=false;
-  const toDemote=[];
-  DB.users.forEach(u=>{
-    if(u.role==='manager' && !curMgrs.includes(u.u)){
-      toDemote.push(u.u); changed=true;
-    }
-    // Controller থেকে বাদ দেওয়ার পরও role field মাঝেমধ্যে 'controller'
-    // আটকে থেকে যেতে পারে (DB.controllers থেকে বাদ গেলেও)। মিলিয়ে দেখে
-    // ঠিক করে দিচ্ছি — নাহলে ভুল Controller ব্যাজ দেখায়।
-    else if(u.role==='controller' && !(DB.controllers&&DB.controllers.includes(u.u))){
-      toDemote.push(u.u); changed=true;
-    }
-  });
-  // ⚠️ RACE FIX: আগে এখানেই সরাসরি u.role='member' বসিয়ে সবশেষে একবার
-  // saveUsers() (পুরো users[] blob) ডাকা হতো — এই reconcile pass একসাথে
-  // একাধিক সদস্যের role বদলাতে পারে বলে ঝুঁকিটা আরও বেশি ছিল। এখন প্রতিটা
-  // demote-worthy uname আলাদা transaction দিয়ে বদলায় — অন্য কারো
-  // concurrent প্রোফাইল/role পরিবর্তন হারায় না।
-  if(changed){
-    toDemote.forEach(uname=>{
-      syncRole(uname,'member');
-      updateUserRecord(uname, rec=>{ rec.role='member'; return rec; });
+  if(!isController()) return;
+  const curKey = messMonthKey();
+  loadManagersForMonth(curKey).then(curMgrs=>{
+    let changed=false;
+    const toDemote=[], toPromote=[];
+    DB.users.forEach(u=>{
+      if(u.role==='manager' && !curMgrs.includes(u.u)){
+        toDemote.push(u.u); changed=true;
+      }
+      // Controller থেকে বাদ দেওয়ার পরও role field মাঝেমধ্যে 'controller'
+      // আটকে থেকে যেতে পারে (DB.controllers থেকে বাদ গেলেও)। মিলিয়ে দেখে
+      // ঠিক করে দিচ্ছি — নাহলে ভুল Controller ব্যাজ দেখায়।
+      else if(u.role==='controller' && !(DB.controllers&&DB.controllers.includes(u.u))){
+        toDemote.push(u.u); changed=true;
+      }
+      // ✅ FIX (2026-09-11): promote pass — ভবিষ্যতের কোনো মাসের জন্য আগে
+      // থেকে নির্বাচিত ম্যানেজার, সেই মাস আসলেই শুরু হওয়ার পর, এখানে এসে
+      // আসল role পান (দেখুন setManager()-এর নতুন তারিখ-চেক)।
+      else if(u.role!=='manager' && u.role!=='controller' && curMgrs.includes(u.u)){
+        toPromote.push(u.u); changed=true;
+      }
     });
-  }
+    // ⚠️ RACE FIX: আগে এখানেই সরাসরি u.role='member' বসিয়ে সবশেষে একবার
+    // saveUsers() (পুরো users[] blob) ডাকা হতো — এই reconcile pass একসাথে
+    // একাধিক সদস্যের role বদলাতে পারে বলে ঝুঁকিটা আরও বেশি ছিল। এখন প্রতিটা
+    // demote/promote-worthy uname আলাদা transaction দিয়ে বদলায় — অন্য কারো
+    // concurrent প্রোফাইল/role পরিবর্তন হারায় না।
+    if(changed){
+      toDemote.forEach(uname=>{
+        syncRole(uname,'member');
+        updateUserRecord(uname, rec=>{ rec.role='member'; return rec; });
+      });
+      toPromote.forEach(uname=>{
+        syncRole(uname,'manager');
+        updateUserRecord(uname, rec=>{ rec.role='manager'; return rec; });
+      });
+    }
+    // ✅ NEW (2026-09-11): উপরের পাস দুটো শুধু *এই মুহূর্তে* যা করার দরকার
+    // তা করে। কিন্তু আগে কোনো Manager-triggered ডিমোট আধা-আধি থেমে যাওয়ার
+    // ফলে থেকে যাওয়া পুরনো mismatch (তালিকায় Member, roles/{uid}-এ এখনো
+    // Manager) খুঁজে বের করে ঠিক করার জন্য আলাদা পাস দরকার — এটা এখন
+    // Controller সেশনেই চলছে বলে সবসময় নিরাপদে চলবে।
+    _selfHealHiddenPermissions();
+  });
+}
+// ✅ NEW (2026-09-11): সদস্য-তালিকায় (users[].role) যা দেখাচ্ছে, আর
+// roles/{uid}-এ (আসল, Firebase rules-চেক-করা পারমিশন) যা লেখা আছে — এই
+// দুটো সবসময় এক থাকার কথা। কিন্তু Manager-triggered কোনো ডিমোট আগে আধা-আধি
+// থেমে গেলে এই দুটো আলাদা হয়ে যেতে পারত (কাইয়ুম/ইসরাফিল/Test Only-এর
+// ক্ষেত্রে ঠিক যা হয়েছিল)। এই ফাংশন সেই ফারাক খুঁজে নিজে থেকেই মিলিয়ে
+// দেয়। শুধু _reconcileManagerRoles()-এর ভেতর থেকে, অর্থাৎ শুধু Controller
+// সেশনেই ডাকা হয় — তাই লেখাটা সবসময় সফল হবে। Controller স্ট্যাটাস এখানে
+// কখনো ছোঁয়া হয় না (hidden!=='controller' && visible!=='controller' চেক) —
+// শুধু manager/member ফারাক ঠিক হয়; Controller যোগ/বাদ আলাদা, বেশি
+// সংবেদনশীল পথেই (addController/removeController) থাকে।
+function _selfHealHiddenPermissions(){
+  firebase.database().ref('roles').once('value').then(snap=>{
+    const rolesData = snap.val()||{};
+    DB.users.forEach(u=>{
+      if(!u.uid) return;
+      const hidden = rolesData[u.uid] && rolesData[u.uid].role;
+      const visible = u.role || 'member';
+      if(hidden && hidden!==visible && visible!=='controller' && hidden!=='controller'){
+        console.warn('[self-heal] permission mismatch for',u.name,': hidden='+hidden+', visible='+visible,'→ fixing to',visible);
+        setRoleAtomic(u.uid, visible).catch(e=>console.error('[self-heal] failed for',u.u,e));
+      }
+    });
+  }).catch(e=>console.error('[self-heal] roles fetch failed:',e));
 }
 // ✅ FIX (হালকা সংস্করণ): আগের ভার্সন পুরো months tree পড়ত (মিল/বাজার/
 // লেনদেন সহ সব ইতিহাস) — ডাউনলোড খরচ অনাবশ্যক বাড়ত। এখন শুধু প্রতি মাসের
@@ -405,8 +459,20 @@ function _cleanOrphanManagerRefs(){
     m--; if(m<1){ m=12; y--; }
   }
 }
+// ⚠️ CRITICAL FIX (2026-09-11): আগে DB.managers[m] সরাসরি in-memory থেকে
+// পড়া হতো, যেটা সেশন-শুরুর সময়ের "বর্তমান মাস" থেকে একবারই লোড হয়েছিল —
+// অন্য মাসের/অন্য সময়ে সেভ করা ডেটা এখানে দেখাই যেত না, এমনকি সেই ডেটা
+// Firebase-এ ঠিকই থাকলেও ("এই মাসে কোনো ম্যানেজার নেই" ভুলভাবে দেখাত)।
+// এখন সবসময় loadManagersForMonth() দিয়ে সরাসরি Firebase থেকে টাটকা পড়া
+// হয় — দেখানোর ঠিক আগে।
 function renderManagerInfo(){
-  const m=document.getElementById('mgr-month').value||mk();
+  const m=document.getElementById('mgr-month').value||messMonthKey();
+  const el=document.getElementById('mgr-current');
+  if(!el) return;
+  el.innerHTML='<p class="muted" style="margin:0">লোড হচ্ছে...</p>';
+  loadManagersForMonth(m).then(()=>_renderManagerInfoNow(m));
+}
+function _renderManagerInfoNow(m){
   const mgrs=DB.managers[m]||[];
   const el=document.getElementById('mgr-current');
   if(!el) return;
@@ -463,18 +529,32 @@ function syncRole(uname, role){
 
 function setManager(){
   if(!isOnline()){ noNetPopup(); return; }
+  // ✅ NEW (2026-09-11): এই বাটন এমনিতেই UI-তে ctrl-only, কিন্তু কোড-লেভেলেও
+  // একই চেক রাখলাম — যাতে কখনো কোনোভাবে Manager এই ফাংশন পর্যন্ত পৌঁছে
+  // গেলেও role sync আধা-আধি না থামে (দেখুন roles/{uid} rules — Controller
+  // ছাড়া লেখা যায় না)।
+  if(!isController()){ toast('❌ শুধু Controller ম্যানেজার নির্ধারণ করতে পারবেন!'); return; }
   const month=document.getElementById('mgr-month').value, uname=document.getElementById('mgr-sel').value;
   if(!month||!uname){ toast('❌ মাস ও সদস্য নির্বাচন করুন!'); return; }
   if(!DB.managers[month]) DB.managers[month]=[];
   if(DB.managers[month].length>=10){ toast('❌ সর্বোচ্চ ১০ জন ম্যানেজার রাখা যাবে!'); return; }
   if(!DB.managers[month].includes(uname)) DB.managers[month].push(uname);
   const u=DB.users.find(x=>x.u===uname);
+  // ⚠️ CRITICAL FIX (2026-09-11): আগে যেই মাসের জন্যই নির্বাচন করা হোক
+  // (এমনকি ভবিষ্যতের কোনো মাস), role='manager' *এখনই* সেট হয়ে যেত — সেই
+  // মাস আসলেই শুরু হয়েছে কিনা তা একবারও চেক না করে। ফলে ভবিষ্যতের মাসের
+  // জন্য কাউকে আগে থেকে বেছে রাখলে তার এক্সেস মাস শুরুর অনেক আগেই চালু
+  // হয়ে যেত। এখন শুধু "চলতি মাস"-এর জন্য নির্বাচন করলেই এখনই sync হয়;
+  // ভবিষ্যতের মাসের জন্য নির্বাচন করলে শুধু তালিকায় যোগ হয় — সেই মাস
+  // শুরু হওয়ার পর, Controller পরের বার Admin স্ক্রিন খুললে,
+  // _reconcileManagerRoles()-এর promote pass আসল role চালু করবে।
+  const isCurrentMonth = (month === messMonthKey());
   // ✅ FIX (2026-08): আগে শুধু u.role==='member' হলেই sync হতো — local
   // কপি কোনো কারণে stale/ভুল দেখালে (যেমন আগে থেকেই 'manager' মনে হচ্ছে
   // কিন্তু roles/{uid} আসলে 'member') sync-ই স্কিপ হয়ে যেত, array-তে যোগ
   // হওয়া সত্ত্বেও। এখন controller ছাড়া সবার জন্য প্রতিবার sync হবে —
   // idempotent, ক্ষতি নেই, কিন্তু drift permanently আটকে যাওয়া বন্ধ হলো।
-  if(u && u.role!=='controller'){
+  if(isCurrentMonth && u && u.role!=='controller'){
     syncRole(uname,'manager');
     // ⚠️ RACE FIX: saveUsers() (পুরো users[] blob overwrite) বাদ — শুধু এই
     // uname-এর role field-টাই transaction দিয়ে বদলানো হয়, অন্য কারো
@@ -482,20 +562,21 @@ function setManager(){
     // updateUserRecord()।
     updateUserRecord(uname, rec=>{ rec.role='manager'; return rec; });
   }
-  // ✅ FIX: saveDB() বাদ — targeted saves। managers=month data, users=global।
-  // saveDB() → saveMonth() পুরো month array overwrite করত (race condition)।
-  // saveGlobal() বাদ — এই function cfg/siteNote/notice/shortfall কিছুই
-  // ছোঁয় না, অকারণে ডাকলে শুধু অন্য কারো cfg/shortfall পরিবর্তনকে
-  // ঝুঁকিতে ফেলত (একই GLOBAL_FIELDS blob-write সমস্যা)।
-  currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+  // ⚠️ CRITICAL FIX (2026-09-11): আগে পুরো DB.managers (সব মাস একসাথে)
+  // currentMonthRef-এ (সেশন-শুরুর সময়ের "বর্তমান মাস", যা বদলে যেতে পারে)
+  // সেভ হতো — এখন শুধু *এই* মাসের নিজের তালিকা, তারই নিজের নামের নোডে
+  // সেভ হচ্ছে (months/{month}/managers/{month}) — ঠিক যেখানে
+  // _cleanOrphanManagerRefs()/_purgeManagerRefsAllMonths() আগে থেকেই
+  // পড়ে/লেখে, আর যেখান থেকে loadManagersForMonth() পড়বে।
+  monthsRef.child(month).child('managers').child(month).set(DB.managers[month]).catch(e=>console.error('Managers save:',e));
   renderManagerInfo();
-  const sel=document.getElementById('mgr-remove');
-  sel.innerHTML='<option value="">-- ম্যানেজার নির্বাচন --</option>';
-  (DB.managers[month]||[]).forEach(u=>{ const usr=DB.users.find(x=>x.u===u); if(usr) sel.innerHTML+=`<option value="${esc(u)}">${esc(usr.name)}</option>`; });
-  toast('✅ ম্যানেজার নির্বাচন সফল হয়েছে');
+  toast(isCurrentMonth ? '✅ ম্যানেজার নির্বাচন সফল হয়েছে' : '✅ পরবর্তী মাসের জন্য সংরক্ষণ করা হয়েছে — ওই মাস শুরু হলে এক্সেস চালু হবে');
 }
 function removeManager(){
   if(!isOnline()){ noNetPopup(); return; }
+  // ✅ NEW (2026-09-11): setManager()-এর মতো একই কারণে — UI-তে এমনিতেই
+  // ctrl-only, কোড-লেভেলেও রাখলাম যাতে role sync কখনো আধা-আধি না থামে।
+  if(!isController()){ toast('❌ শুধু Controller ম্যানেজার বাদ দিতে পারবেন!'); return; }
   const month=document.getElementById('mgr-month').value, uname=document.getElementById('mgr-remove').value;
   if(!month||!uname){ toast('❌ ম্যানেজার নির্বাচন করুন!'); return; }
   if(DB.managers[month]) DB.managers[month]=DB.managers[month].filter(u=>u!==uname);
@@ -509,9 +590,10 @@ function removeManager(){
     // transaction দিয়ে শুধু এই uname-এর role বদলায়।
     updateUserRecord(uname, rec=>{ rec.role='member'; return rec; });
   }
-  // ✅ FIX: targeted save — managers path only। saveGlobal() বাদ — এই
-  // function cfg/siteNote/notice/shortfall কিছুই ছোঁয় না।
-  currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+  // ⚠️ CRITICAL FIX (2026-09-11): setManager()-এর মতো — শুধু এই মাসের
+  // নিজের তালিকা, তারই নিজের নামের নোডে সেভ হচ্ছে, "বর্তমান মাস" সেশন
+  // কখন শুরু হয়েছিল তার উপর নির্ভর না করে।
+  monthsRef.child(month).child('managers').child(month).set(DB.managers[month]||[]).catch(e=>console.error('Managers save:',e));
   renderManagerInfo(); toast('✅ ম্যানেজার বাদ দেওয়া হয়েছে!');
 }
 // saveCfg() — moved to js/rules.js (rules screen function, misplaced in ADMIN)
@@ -675,7 +757,12 @@ function deleteMember(){
     Object.keys(DB.managers).forEach(m=>{ DB.managers[m]=(DB.managers[m]||[]).filter(u=>u!==uname); });
     // member মুছলে _minUserCount আপডেট — নাহলে false block
     if(typeof _minUserCount!=='undefined') _minUserCount=Math.max(0,new Set(DB.users.filter(u=>u&&u.u).map(u=>u.u)).size);
-    currentMonthRef.child('managers').set(DB.managers).catch(e=>console.error('Managers save:',e));
+    // ⚠️ CRITICAL FIX (2026-09-11): এখানে আগে পুরো DB.managers (সব মাস
+    // একসাথে) currentMonthRef-এ (সেশন-শুরুর "বর্তমান মাস") সেভ হতো — এটাই
+    // ছিল ম্যানেজার-তালিকা ভুল মাসের ঘরে "আটকে" যাওয়ার মূল কারণ। ঠিক
+    // নিচের _purgeManagerRefsAllMonths() আগে থেকেই প্রতিটা মাসের নিজের
+    // নোডে গিয়ে ঠিকভাবে uname সরায় — তাই এই লাইনটা সরিয়ে দেওয়া হলো,
+    // দরকারও ছিল না, ক্ষতিই করছিল।
     // ✅ FIX: শুধু বর্তমানে লোড করা মাস না — গত ২৪ মাসের ম্যানেজার
     // রেফারেন্স থেকেও এই সদস্যকে সরিয়ে দাও, একেবারে delete-এর মুহূর্তেই।
     // এটা শুধু "কে ম্যানেজার ছিল" এই ছোট্ট রেফারেন্স ছোঁয় — মিল/বাজার/
@@ -1353,13 +1440,18 @@ function closeAllMembersBill(){ goHome(); }
 // ═══════════════════════════════════════════════
 // MESS MANAGER SCREEN
 // ═══════════════════════════════════════════════
+// ⚠️ CRITICAL FIX (2026-09-11): renderManagerInfo()-এর মতো একই কারণে —
+// এই স্ক্রিন সব সদস্যই দেখতে পারেন ("কে এই মাসের ম্যানেজার" জানার জন্য),
+// তাই ভুল/পুরনো তথ্য দেখানো এখানে বিশেষভাবে সমস্যার। এখন সবসময়
+// loadManagersForMonth() দিয়ে টাটকা পড়া হয়।
 function newMessManagerScreen(){
   const mm=messMonthKey();
   document.getElementById('mm-screen-month').textContent=messMonthLabel();
-  const mgrs=DB.managers[mm]||[];
   const list=document.getElementById('mm-list');
-  if(!mgrs.length){ list.innerHTML='<div class="card tc"><p class="muted">এই মাসে কোনো ম্যানেজার নির্ধারিত নেই।</p></div>'; }
-  else{
+  list.innerHTML='<div class="card tc"><p class="muted">লোড হচ্ছে...</p></div>';
+  showSc('messmanager');
+  loadManagersForMonth(mm).then(mgrs=>{
+    if(!mgrs.length){ list.innerHTML='<div class="card tc"><p class="muted">এই মাসে কোনো ম্যানেজার নির্ধারিত নেই।</p></div>'; return; }
     list.innerHTML = safeHTML(mgrs.map((uname)=>{
       const u=DB.users.find(x=>x.u===uname);
       if(!u) return '';
@@ -1375,8 +1467,7 @@ function newMessManagerScreen(){
         </div>
       </div>`;
     }).join(''));
-  }
-  showSc('messmanager');
+  });
 }
 
 // ═══════════════════════════════════════════════

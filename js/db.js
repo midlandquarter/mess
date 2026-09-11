@@ -190,6 +190,58 @@ function setRoleAtomic(uid, role){
   return firebase.database().ref().update(updates);
 }
 
+// ── প্রতি মাসের ম্যানেজার-তালিকা — সবসময় টাটকা করে পড়ো ──────────────────────
+// ⚠️ CRITICAL FIX (2026-09-11): DB.managers আগে MONTH_FIELDS-এর অংশ হিসেবে
+// শুধু সেশন-শুরুর সময়ের "বর্তমান মাস" (currentMonthRef) থেকে, প্রতি
+// সেশনে *একবারই* লোড হতো। কিন্তু DB.managers আসলে একটা multi-month ম্যাপ
+// (অতীত/ভবিষ্যৎ সব মাসের এন্ট্রি একসাথে রাখে) — কাউকে ম্যানেজার সেট/রিমুভ
+// করার সময় পুরো ম্যাপটাই currentMonthRef-এ সেভ হতো। ফলে "বর্তমান মাস" যেই
+// মুহূর্তে সেশন শুরু হয়েছিল সেটার উপর নির্ভর করে ভিন্ন ভিন্ন সময়ে সেভ করা
+// ডেটা ভিন্ন ভিন্ন মাসের ফোল্ডারে গিয়ে জমা হতো (যেমন ১০ তারিখ রাতে সেভ
+// করলে এখনো আগস্টের ফোল্ডারে যেত, ১১ তারিখ থেকে অ্যাপ সেপ্টেম্বরের
+// ফোল্ডার দেখা শুরু করত) — তাই ডেটা হারাতো না, কিন্তু ভুল জায়গায় "আটকে"
+// থাকত, নতুন সেশনে অদৃশ্য হয়ে যেত।
+// সমাধান: প্রতিটা মাস নিজের ম্যানেজার-তালিকা রাখে নিজের নামের নোডেই —
+// months/{মাস}/managers/{মাস} — ঠিক যেভাবে _cleanOrphanManagerRefs() আর
+// _purgeManagerRefsAllMonths() আগে থেকেই পড়ে/লেখে (এই ফাংশন দুটো এই
+// সমস্যায় পড়েনি, কারণ ওরা কখনো "বর্তমান মাস"-এর উপর নির্ভর করেনি)। আর
+// দেখানোর ঠিক আগে সবসময় Firebase থেকে সরাসরি পড়া হয় — সেশন কখন শুরু
+// হয়েছিল তার উপর নির্ভর না করেই।
+function loadManagersForMonth(monthKey){
+  if(!monthsRef || !monthKey) return Promise.resolve((DB.managers&&DB.managers[monthKey])||[]);
+  return monthsRef.child(monthKey).child('managers').child(monthKey).once('value').then(snap=>{
+    const v=snap.val();
+    const arr = Array.isArray(v) ? v : (typeof v==='string' && v ? [v] : []);
+    if(!DB.managers) DB.managers={};
+    DB.managers[monthKey]=arr;
+    return arr;
+  }).catch(e=>{
+    console.error('loadManagersForMonth failed for',monthKey,':',e);
+    return (DB.managers&&DB.managers[monthKey])||[];
+  });
+}
+
+// ✅ NEW (2026-09-11): loadMembers() (প্রতি সার্চ-কি-স্ট্রোকে চলে) আর
+// roleLabel()-এর মতো জায়গাগুলো DB.managers[messMonthKey()] সরাসরি,
+// synchronously পড়ে — প্রতিবার fetch করা এখানে অপচয় (কি-স্ট্রোকে
+// নেটওয়ার্ক কল)। তার বদলে "বর্তমান মাস"-এর জন্য একটা হালকা realtime
+// listener লাগিয়ে রাখা হয়, যাতে DB.managers[বর্তমান-মাস] সবসময় নিজে
+// থেকেই টাটকা থাকে — আলাদা fetch ছাড়াই। _checkReady()-এর ভেতর থেকে
+// ডাকা হয় (যেটা সেশনে একাধিকবার চলতে পারে) — মাস বদলে গেলে (যেমন ১১
+// তারিখ পার হলে) পরের বার এমনিতেই সঠিক নতুন মাসে re-attach হয়ে যাবে।
+let _curMgrListenerKey=null;
+function _ensureCurrentManagerListener(){
+  if(!monthsRef) return;
+  const key=messMonthKey();
+  if(_curMgrListenerKey===key) return;
+  _curMgrListenerKey=key;
+  monthsRef.child(key).child('managers').child(key).on('value', snap=>{
+    const v=snap.val();
+    if(!DB.managers) DB.managers={};
+    DB.managers[key]=Array.isArray(v) ? v : (typeof v==='string' && v ? [v] : []);
+  });
+}
+
 // ── controllers আলাদা save — controller-only Firebase path ─────────────────
 // Firebase Rule: global/controllers → শুধু controller লিখতে পারবে।
 // GLOBAL_FIELDS-এ নেই কারণ saveGlobal() manager-ও call করে →
@@ -766,6 +818,7 @@ function loadDB(){
       if(!globalReady||!monthReady) return;
       clearTimeout(timer);
       migrateDB();
+      _ensureCurrentManagerListener();
       invalidateMealIndex(); invalidateMemberCountsCache(); invalidateTxBalCache(); invalidateMealRateCache();
       _dbLoaded=true;
       _refreshActiveScreen();
