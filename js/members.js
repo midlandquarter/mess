@@ -95,7 +95,7 @@ function toggleManagerView(){
             if(!usr) return '';
             return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
               <div style="width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">${usr.name[0].toUpperCase()}</div>
-              <div><div style="font-weight:600;font-size:13px">${usr.name}</div><div style="font-size:11px;color:var(--text-light)">ID- ${usr.job||'—'} · রুম ${usr.room||'—'}</div></div>
+              <div><div style="font-weight:600;font-size:13px">${usr.name}</div><div style="font-size:11px;color:var(--text-light)">ID- ${usr.job||'—'} · রুম ${usr.room||'—'}${(usr.mob||'').trim()?' · 📞 '+usr.mob.trim():''}</div></div>
             </div>`;
           }).join('');
     });
