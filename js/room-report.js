@@ -68,8 +68,11 @@ function openRoomReport(){
       return a.localeCompare(b);
     });
 
-    const typeLabel=u=>u.type==='outside'?'আউটসাইড':'ইনসাইড';
-    const typeColor=u=>u.type==='outside'?'#e65100':'#1a6b3c';
+    // ✅ FIX (2026-09-12): office-টাইপ সদস্য (থার্ড-পার্টি) আগে ভুলে
+    // "ইনসাইড" (সবুজ) দেখাত, কারণ type!=='outside' মানেই inside ধরা হতো।
+    // এখন আলাদাভাবে "🏢 অফিস" দেখাবে।
+    const typeLabel=u=>isOfficeMealUser(u)?'🏢 অফিস':u.type==='outside'?'আউটসাইড':'ইনসাইড';
+    const typeColor=u=>isOfficeMealUser(u)?'#0284c7':u.type==='outside'?'#e65100':'#1a6b3c';
     const blockedTag=u=>u.blocked?' <span style="font-size:9px;background:#fdecea;color:#c62828;border-radius:4px;padding:1px 5px;">ব্লকড</span>':'';
 
     let rows='';

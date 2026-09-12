@@ -188,7 +188,7 @@ function openMemberDetail(uname){
   document.getElementById('memdet-info').innerHTML = safeHTML(`
     <div class="prof-av" style="width:60px;height:60px;font-size:24px">${esc(u.name[0])}</div>
     <div style="font-size:18px;font-weight:700">${esc(u.name)}</div>
-    <div style="font-size:13px;color:var(--text-light);margin-top:4px">${esc(roleLabel(u.role,u))} · ${u.type==='inside'?'ইনসাইড':'আউটসাইড'}</div>
+    <div style="font-size:13px;color:var(--text-light);margin-top:4px">${esc(roleLabel(u.role,u))} · ${isOfficeMealUser(u)?'🏢 অফিস':u.type==='inside'?'ইনসাইড':'আউটসাইড'}</div>
     ${_phoneRow}
     <div style="margin-top:8px;font-size:22px;font-weight:700;color:${bal>=0?'var(--success)':'var(--danger)'}">${bal>=0?'+':''}৳${Math.abs(bal).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
     <div style="font-size:12px;color:var(--text-light)">${bal>=0?'জমা আছে':'বকেয়া আছে'}</div>

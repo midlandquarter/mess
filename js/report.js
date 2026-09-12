@@ -100,7 +100,7 @@ function _doLoadReport(mmKey){
         <div style="font-size:10px;opacity:.8;margin-top:2px">বাবুর্চির মিল</div>
       </div>
       <div class="hero-cell" style="padding:10px 6px;text-align:center">
-        <div style="font-size:11px;font-weight:700;color:#7dd3fc">MEPL+MPCL</div>
+        <div style="font-size:11px;font-weight:700;color:#7dd3fc">Office</div>
         <div style="font-size:13px;font-weight:700;color:#7dd3fc">${officeMeals.toFixed(1)}মিল</div>
         <div style="font-size:12px;font-weight:700;color:#7dd3fc">৳${officeMealBill.toFixed(0)}</div>
       </div>

@@ -691,7 +691,8 @@ function saveEditMem(){
   u.job=newJob;
   u.remarks=newRemarks;
   // joined ও activeFrom edit করা নিষিদ্ধ — registration-এ set হয়, পরে অপরিবর্তনীয়
-  if(['inside','outside','cook'].includes(newType)) u.type=newType;
+  // ✅ NEW (2026-09-12): 'office' যোগ হলো — থার্ড-পার্টি/অফিস-বিল সদস্যের জন্য।
+  if(['inside','outside','cook','office'].includes(newType)) u.type=newType;
 
   // ✅ FIX: saveDB() বাদ — শুধু users (global data) পরিবর্তন হয়েছে।
   // saveDB() → saveMonth() month arrays overwrite করত।
@@ -1318,7 +1319,7 @@ function showAllMembersBill(){
       <div class="amb-cell"><div class="amb-lbl">নেট মিল (সবার)</div><div class="amb-val">${parseFloat(netMeals.toFixed(2))}</div></div>
       <div class="amb-cell amb-sep"><div class="amb-lbl">বাবুর্চির মিল</div><div class="amb-val amb-orange">${parseFloat(cookMeals.toFixed(2))}</div></div>
       <div class="amb-cell amb-sep">
-        <div class="amb-lbl">অফিস মিল<br><span style="font-size:9px;opacity:.7">MEPL+MPCL</span></div>
+        <div class="amb-lbl">অফিস মিল<br><span style="font-size:9px;opacity:.7">Office</span></div>
         <div class="amb-val amb-blue">${parseFloat(ofMls.toFixed(1))}মিল</div>
         <div class="amb-val amb-blue" style="font-size:12px">৳${ofBill.toFixed(0)}</div>
       </div>

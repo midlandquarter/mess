@@ -186,7 +186,12 @@ function mealTypeValue(slot,type,qty,date,utype){
 // ═══════════════════════════════════════════════
 function getCfg(t,dateStr,utype){
   const mmKey = dateStr ? messMonthKey(new Date(dateStr)) : messMonthKey();
-  const grpKey = utype==='outside' ? 'outsider' : 'insider';
+  // ✅ FIX (2026-09-12): আগে শুধু 'outside' চেক হতো, বাকি সব (inside/cook/
+  // নতুন 'office') 'insider' ধরে নিত। এখন 'office'-কেও 'outsider' গ্রুপে
+  // ফেলা হচ্ছে — কারণ MPCL/MEPL (পুরনো _office পদ্ধতি) সবসময় type:'outside'
+  // দিয়ে তৈরি হয়, তাই তারা এমনিতেই 'outsider' কনফিগ পায়। নতুন office-টাইপ
+  // সদস্যও একই কনফিগ পেলে তবেই মিল-সংখ্যার হিসাব MPCL/MEPL-এর সাথে মিলবে।
+  const grpKey = (utype==='outside'||utype==='office') ? 'outsider' : 'insider';
 
   // 1st: এই মেস মাসের specific config
   const mmCfg = DB.cfg[mmKey] && DB.cfg[mmKey][grpKey];
