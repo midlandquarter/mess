@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v21'; // V21: Meal update lock Time change please upgrade All file
+const CACHE_VERSION = 'mq-v22'; // V22: Manager system fix, phone number added in members list, any person selected as office if admin want ,please upgrade All file
 
 const SHELL_ASSETS = [
   './',
