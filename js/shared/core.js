@@ -44,6 +44,10 @@ function fmtDate(isoStr){
 //            admin.js (handover), pdf.js, home.js (activeUsers)
 // External dep: messMonthKey() — lives in utils.js (loads before core.js ✓)
 function isActiveInMonth(u, mmKey){
+  // ✅ NEW (2026-11-23): মেস ছেড়েছেন (Resigned) — activeTo মাসের পরের মাসগুলোতে আর active নয়।
+  // কিন্তু activeTo পর্যন্ত সব মাসে (পুরনো হিসাব, মিল রেট, রিপোর্ট, হিস্ট্রি) আগের মতোই গণ্য হয় —
+  // তাই সদস্যকে তালিকা থেকে সরালেও পুরনো মাসের হিসাব বদলায় না।
+  if(u.activeTo && mmKey > u.activeTo) return false;
   if(u.activeFrom) return u.activeFrom <= mmKey;
   // activeFrom নেই → joined date থেকে সঠিক মেস মাস বের করো (11-10 cycle)
   if(u.joined) return messMonthKey(new Date(u.joined)) <= mmKey;
@@ -51,6 +55,25 @@ function isActiveInMonth(u, mmKey){
   return true;
 }
 
+
+// ✅ NEW (2026-11-23): মেস ছেড়েছেন (Resigned) — সদস্য বাদ দিন
+// সদস্যকে আর DB.users থেকে মুছে ফেলা হয় না — রেকর্ড থেকে যায় (left:true, activeTo:'YYYY-MM'),
+// যাতে পুরনো মাসের হিসাব অক্ষত থাকে। চলতি কাজের তালিকায় (সদস্য তালিকা, জমা-উত্তোলন, মিল এডিট,
+// হোম ইত্যাদি) !u.left দিয়ে বাদ দেওয়া হয়।
+function isFormerMember(u){ return !!(u && u.left); }
+// 'YYYY-MM' মেস-মাস কী → "নভেম্বর ২০২৬" ধরনের বাংলা লেবেল
+function bnCycleLabel(mmKey){
+  const mn=['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
+  const p=String(mmKey||'').split('-').map(Number);
+  if(p.length!==2||!p[0]||!p[1]) return String(mmKey||'');
+  return mn[p[1]-1]+' '+p[0];
+}
+// আগের মেস-মাসের কী (YYYY-MM)
+function prevCycleKeyOf(mmKey){
+  let [y,m]=String(mmKey).split('-').map(Number);
+  m--; if(m<1){ m=12; y--; }
+  return y+'-'+String(m).padStart(2,'0');
+}
 
 // ── GROUP 4: Office Meal Identity ───────────────
 // Defined in original: office-meal.js section (lines 6131–6145)
