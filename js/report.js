@@ -326,7 +326,7 @@ function _doMakePDF(type){
     } else {
       // ── DAILY REPORT ──
       let totB=0,totL=0,totD=0;
-      DB.users.forEach(u=>{
+      DB.users.filter(u=>!u.left).forEach(u=>{
         const m=DB.meals[u.u+'_'+today]||{b:{t:'off',q:1},l:{t:'off',q:1},d:{t:'off',q:1}};
         totB+=mTV('b',m.b,today,u.type); totL+=mTV('l',m.l,today,u.type); totD+=mTV('d',m.d,today,u.type);
       });
@@ -344,7 +344,7 @@ function _doMakePDF(type){
           <th style="padding:7px 6px;text-align:center">Dinner</th>
           <th style="padding:7px 8px;text-align:right">Total</th>
         </tr></thead><tbody>`;
-      DB.users.forEach((u,ri)=>{
+      DB.users.filter(u=>!u.left).forEach((u,ri)=>{
         const m=DB.meals[u.u+'_'+today]||{b:{t:'off',q:1},l:{t:'off',q:1},d:{t:'off',q:1}};
         const bv=mTV('b',m.b,today,u.type),lv=mTV('l',m.l,today,u.type),dv=mTV('d',m.d,today,u.type);
         const bL=m.b.t==='off'?'-':(m.b.q>1?m.b.t+m.b.q:m.b.t);

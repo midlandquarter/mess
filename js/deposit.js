@@ -103,7 +103,7 @@ function invalidateTxBalCache(){ _txBalCache = null; _txBalCacheKey = ''; }
 function depMemSearch(){
   const q=(document.getElementById('dep-mem-search').value||'').trim();
   const dd=document.getElementById('dep-mem-dropdown');
-  const users=DB.users.filter(u=>u.type!=='cook');
+  const users=DB.users.filter(u=>u.type!=='cook' && !u.left); // ✅ Resigned সদস্য বাদ
   let matches;
   if(!q){
     // খালি থাকলে সব দেখাও

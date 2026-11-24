@@ -164,6 +164,13 @@ auth.onAuthStateChanged(fbUser=>{
           });
           return;
         }
+        // ✅ NEW (2026-11-23): মেস ছেড়েছেন (Resigned) — সুরক্ষা হিসেবে এখানেও আটকাও
+        if(DB.users[syncIdx].left){
+          hideSplash(); auth.signOut(); CU=null; localStorage.removeItem('mq_authed'); showSc('login');
+          const _kal2=document.getElementById('login-alert');
+          if(_kal2){ _kal2.textContent='ℹ️ আপনি মেস ছেড়েছেন (Resigned)। এই অ্যাকাউন্ট দিয়ে আর লগইন করা যাবে না।'; _kal2.className='alert alert-warning show'; }
+          return;
+        }
         // ✅ FIX: users/{uid} থেকে শুধু auth fields নাও।
         // name, room, job, mob, balance সবসময় messData/users থেকে রাখো।
         DB.users[syncIdx].uid           = uid;
@@ -407,6 +414,13 @@ function doLogin(){
             auth.signOut(); CU=null; localStorage.removeItem('mq_authed');
             if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
             al.textContent='❌ আপনার অ্যাকাউন্টটি সাইট থেকে মুছে ফেলা হয়েছে।'; al.className='alert alert-danger show';
+            return;
+          }
+          // ✅ NEW (2026-11-23): মেস ছেড়েছেন (Resigned) — লগইন বন্ধ
+          if(DB.users[si].left){
+            auth.signOut(); CU=null; localStorage.removeItem('mq_authed');
+            if(btn){ btn.disabled=false; btn.textContent='Login করুন'; }
+            al.textContent='ℹ️ আপনি মেস ছেড়েছেন (Resigned)। এই অ্যাকাউন্ট দিয়ে আর লগইন করা যাবে না।'; al.className='alert alert-warning show';
             return;
           }
           DB.users[si].uid=uid; DB.users[si].role=role;

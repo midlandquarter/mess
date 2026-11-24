@@ -73,7 +73,7 @@ function refreshHome(){
 
   // Meal counts for viewDate
   let tb=0,tl=0,tdv=0, cbQ=0,clQ=0,cdQ=0;
-  DB.users.filter(u=>!u.blocked).forEach(u=>{
+  DB.users.filter(u=>!u.blocked && !u.left).forEach(u=>{
     const m=DB.meals[u.u+'_'+viewDate]||{b:{t:'off',q:1},l:{t:'off',q:1},d:{t:'off',q:1}};
     tb+=mTV('b',m.b,viewDate,u.type); tl+=mTV('l',m.l,viewDate,u.type); tdv+=mTV('d',m.d,viewDate,u.type);
     if(m.b&&m.b.t!=='off') cbQ+=(m.b.q||1);
@@ -271,7 +271,7 @@ function setWeView(v){
 function _collectWeData(){
   _wePlanters = [];
   _weQtr = [];
-  (DB.users||[]).filter(u=>!u.blocked).forEach(u=>{
+  (DB.users||[]).filter(u=>!u.blocked && !u.left).forEach(u=>{
     const m = (DB.meals||{})[u.u+'_'+_weDate];
     if(!m || !m[_weSlot] || m[_weSlot].t==='off') return;
     const qty = m[_weSlot].q || 1;

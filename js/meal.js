@@ -423,7 +423,7 @@ function _getMemberCounts(mmKey=null){
   let nonCookMembers = DB.users.filter(x=>
     x.type!=='cook' &&
     !isOfficeMealUser(x) &&
-    (!mmKey || isActiveInMonth(x, mmKey))
+    (mmKey ? isActiveInMonth(x, mmKey) : !x.left) // ✅ mmKey ছাড়া (চলতি) গণনায় Resigned সদস্য বাদ
   );
   // ✅ FIX (2026-07-30): calcMemberOtherShares()-এ outside সদস্য netMeals===0
   // হলে তার others/cookFood বিল বাদ যায় (ইচ্ছাকৃত) — কিন্তু সে headcount-এ

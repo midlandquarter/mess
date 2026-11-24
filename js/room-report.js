@@ -39,7 +39,7 @@ function openRoomReport(){
     // ✅ FIX: cook-দেরও রুম থাকে, তাই রুম-রিপোর্টের জন্য cook=ইনসাইড ধরা
     // হচ্ছে — শুধু outside আলাদা। filter dropdown-এও তাই আর "বাবুর্চি"
     // অপশন নেই, "ইনসাইড" চাপলে cook-রাও দেখা যাবে।
-    let users=(DB.users||[]).filter(u=>u&&u.u);
+    let users=(DB.users||[]).filter(u=>u&&u.u&&!u.left); // ✅ Resigned সদস্য বাদ
     if(filter==='outside') users=users.filter(u=>u.type==='outside');
     else if(filter==='inside') users=users.filter(u=>u.type!=='outside');
 

@@ -51,7 +51,7 @@ let _sfUser=null;
 function sfSearch(){
   const q=(document.getElementById('sf-search').value||'').trim();
   const dd=document.getElementById('sf-dropdown');
-  const users=DB.users.filter(u=>u.type!=='cook'&&!isOfficeMealUser(u));
+  const users=DB.users.filter(u=>u.type!=='cook'&&!isOfficeMealUser(u)&&!u.left); // ✅ Resigned সদস্য বাদ
   let matches;
   if(!q){ matches=users; }
   else {

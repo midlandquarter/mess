@@ -34,6 +34,28 @@
 // removed from config.js (see inline removal instructions below).
 let currentDetailUser = '';
 let currentDetailMemTab = 'meals';
+// ✅ NEW (2026-11-22): সদস্য তালিকা কতটা নিচে স্ক্রল করা ছিল — বিস্তারিত পাতা থেকে
+// ফিরলে ঠিক ওই জায়গায় ফিরিয়ে আনার জন্য। (ui.js-এর popstate-ও এটা পড়ে, তাই window-এ রাখা)
+window._memListScrollY = 0;
+
+// ✅ FIX (2026-11-22): ফোনের Back বাটনে সদস্য তালিকার অবস্থান ধরে রাখা।
+// কারণ: ব্রাউজার নিজে থেকেও Back-এর পর স্ক্রল ঠিক করতে চায়, আর অ্যাপ প্রতিটি পাতা দেখানোর সময়
+// আগে স্ক্রল ০ করে তারপর history-তে জমা রাখে — তাই ব্রাউজারের মনে থাকে "উপরেই ছিল" এবং
+// সে আমাদের ঠিক করা অবস্থানের উপর আবার ০ বসিয়ে দেয়। তাই ব্রাউজারের নিজস্ব স্ক্রল-ঠিক-করা বন্ধ
+// ('manual') করা হলো; স্ক্রল এখন শুধু অ্যাপই ঠিক করবে। (অন্য কোনো পাতার আচরণ বদলায় না,
+// কারণ সেসব পাতায় আগেও সবসময় উপরেই যেত।)
+if('scrollRestoration' in history){ try{ history.scrollRestoration='manual'; }catch(e){} }
+window.addEventListener('popstate',function(e){
+  if(!(e.state && e.state.screen==='members')) return;
+  const y=window._memListScrollY||0;
+  const apply=function(){
+    const sc=document.getElementById('sc-members');
+    if(sc && sc.classList.contains('active')) window.scrollTo(0,y);
+  };
+  apply();                          // সাথে সাথে
+  requestAnimationFrame(apply);     // লেআউট বসার পর
+  setTimeout(apply,80);             // ইতিমধ্যে অন্য কিছু ০ করে দিলে আবার ঠিক করতে
+});
 
 
 // ═══════════════════════════════════════════════
@@ -45,7 +67,7 @@ let currentDetailMemTab = 'meals';
 function _renderMemberCountBar(filteredList) {
   var el = document.getElementById('mem-count-bar');
   if (!el) return;
-  var total = DB.users.filter(function(u){ return !u.blocked; }).length;
+  var total = DB.users.filter(function(u){ return !u.blocked && !u.left; }).length; // ✅ Resigned সদস্য বাদ
   var q = (document.getElementById('mem-search') ? document.getElementById('mem-search').value : '').trim();
   if (q) {
     var shown = filteredList.filter(function(u){ return !u.blocked; }).length;
@@ -108,6 +130,7 @@ function loadMembers(){
 
   // ── Search fix: u.job number হতে পারে — String() দিয়ে convert করো ──
   const filtered = DB.users.filter(u=>{
+    if(u.left) return false; // ✅ মেস ছেড়েছেন (Resigned) — সদস্য তালিকায় দেখানো হয় না (রেকর্ড শুধু পূর্ববর্তী মাসের হিসাবের জন্য থাকে)
     if(!q) return true;
     const name  = (u.name||'').toLowerCase();
     const job   = String(u.job||'').toLowerCase();
@@ -166,10 +189,16 @@ function loadMembers(){
 // MEMBER DETAIL
 // ═══════════════════════════════════════════════
 function openMemberDetail(uname){
+  // ✅ NEW: শুধু তালিকা পাতা সক্রিয় থাকলেই অবস্থান মনে রাখো। (ব্লক/আনব্লকের পর এই
+  // ফাংশন বিস্তারিত পাতা থেকেই আবার ডাকা হয় — তখন যেন আগের সঠিক অবস্থান মুছে না যায়।)
+  const _scMem=document.getElementById('sc-members');
+  if(_scMem && _scMem.classList.contains('active')){
+    window._memListScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+  }
   currentDetailUser=uname;
   const u=DB.users.find(x=>x.u===uname); if(!u) return;
   document.getElementById('memdet-title').textContent=u.name;
-  document.getElementById('memdet-sub').textContent=`রুম ${u.room||'-'} · ${u.job||'-'}`;
+  document.getElementById('memdet-sub').textContent=`রুম ${u.room||'-'} · ${u.job||'-'}`+(u.left?' · মেস ছেড়েছেন (Resigned)':'');
   // Info card
   const _dmmKey=messMonthKey();
   const _dDep=(DB.transactions||[]).filter(tx=>tx.uname===u.u&&tx.type==='deposit'&&dateInMessMonth(tx.date,_dmmKey)).reduce((s,tx)=>s+(tx.amount||0),0);
@@ -214,6 +243,14 @@ function openMemberDetail(uname){
   } else { mgrDiv.style.display='none'; }
   memdetTab('meals');
   showSc('memdetail');
+}
+// ✅ NEW (2026-11-22): "← সদস্য তালিকা" বাটন — তালিকায় ফিরে আগের স্ক্রল অবস্থানে যাবে।
+// (আগে sec('members') ডাকা হতো, যা সবসময় পাতার একদম উপরে নিয়ে যেত।)
+function backToMembers(){
+  const y=window._memListScrollY||0;
+  loadMembers(); showSc('members');
+  window.scrollTo(0,y);
+  requestAnimationFrame(()=>window.scrollTo(0,y)); // লেআউট বসার পর আবার একবার, নিশ্চিত হতে
 }
 function memdetTab(tab){
   currentDetailMemTab=tab;
