@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', event => {
 
 // ─────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'mq-v27'; // V27: 'সদস্য বাদ দিন' — member marked Resigned (kept for history, hidden from lists, no former-members list). V25: Phone Back button now also keeps members list scroll position. V24: Members list keeps scroll position after viewing a member (in-app back + phone Back). V23: Admin meal-edit & member-edit now use Job ID search (like deposit) instead of dropdown. V22: Manager system fix, phone number added in members list, any person selected as office if admin want ,please upgrade All file
+const CACHE_VERSION = 'mq-v28'; // V28: 'সদস্য বাদ দিন' — member marked Resigned (kept for history, hidden from lists, no former-members list). V25: Phone Back button now also keeps members list scroll position. V24: Members list keeps scroll position after viewing a member (in-app back + phone Back). V23: Admin meal-edit & member-edit now use Job ID search (like deposit) instead of dropdown. V22: Manager system fix, phone number added in members list, any person selected as office if admin want ,please upgrade All file
 
 const SHELL_ASSETS = [
   './',
